@@ -1,0 +1,23 @@
+/* Import Yesteryear font */
+@import url('https://fonts.googleapis.com/css2?family=Yesteryear&display=swap');
+
+.jits-logo-text-wrapper {
+    position: relative;
+    transform: scale(var(--scale, 1)); /* default scale = 1 */
+}
+  
+/* Gradient stops */
+.jits-logo-gradient-stop1 { stop-color: #ec4899; stop-opacity: 1; }
+.jits-logo-gradient-stop2 { stop-color:#f97316; stop-opacity: 1; }
+.jits-logo-gradient-stop3 { stop-color:#eab308; stop-opacity: 1; }
+.jits-logo-gradient-stop4 { stop-color:#06b6d4; stop-opacity: 1; }
+  
+/* Main SVG text */
+.jits-logo-text {
+    font-size: 180px;
+    font-family: 'Yesteryear', cursive;
+    letter-spacing: 2px;
+    margin: 50px;
+}
+  
+  
