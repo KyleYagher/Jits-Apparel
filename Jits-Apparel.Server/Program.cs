@@ -161,8 +161,9 @@ app.MapControllers();
 
 app.MapFallbackToFile("/index.html");
 
-// Seed database with default roles
+// Seed database with default roles and categories
 await SeedDefaultRoles(app.Services);
+await SeedDefaultCategories(app.Services);
 
 app.Run();
 
@@ -182,4 +183,29 @@ static async Task SeedDefaultRoles(IServiceProvider serviceProvider)
             await roleManager.CreateAsync(new IdentityRole<int>(roleName));
         }
     }
+}
+
+// Helper method to seed default categories
+static async Task SeedDefaultCategories(IServiceProvider serviceProvider)
+{
+    using var scope = serviceProvider.CreateScope();
+    var dbContext = scope.ServiceProvider.GetRequiredService<JitsDbContext>();
+
+    string[] categoryNames = { "Signature", "Classic", "Limited", "Politics", "Culture", "Meme", "Premium" };
+
+    foreach (var categoryName in categoryNames)
+    {
+        var categoryExists = await dbContext.Categories.AnyAsync(c => c.Name == categoryName);
+        if (!categoryExists)
+        {
+            dbContext.Categories.Add(new Category
+            {
+                Name = categoryName,
+                Description = $"{categoryName} collection",
+                CreatedAt = DateTime.UtcNow
+            });
+        }
+    }
+
+    await dbContext.SaveChangesAsync();
 }

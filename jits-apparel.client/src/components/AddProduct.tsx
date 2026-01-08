@@ -14,6 +14,7 @@ export interface NewProductData {
   imageUrl: string;
   stockQuantity: number;
   isActive: boolean;
+  isFeatured: boolean;
 }
 
 export function AddProduct({ onClose, onSave }: AddProductProps) {
@@ -25,6 +26,7 @@ export function AddProduct({ onClose, onSave }: AddProductProps) {
     imageUrl: '',
     stockQuantity: '',
     isActive: true,
+    isFeatured: false,
   });
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -38,6 +40,7 @@ export function AddProduct({ onClose, onSave }: AddProductProps) {
       imageUrl: formData.imageUrl,
       stockQuantity: parseInt(formData.stockQuantity),
       isActive: formData.isActive,
+      isFeatured: formData.isFeatured,
     };
 
     onSave(newProduct);

@@ -19,7 +19,8 @@ import {
   Clock,
   Trash2,
   Edit,
-  Eye
+  Eye,
+  Star
 } from 'lucide-react';
 import { ProductDetail } from '../components/ProductDetail';
 import { EditProduct } from '../components/EditProduct';
@@ -224,10 +225,30 @@ export function Dashboard() {
     setSelectedProductForEdit(null);
   };
 
-  const handleProductDelete = () => {
-    // In real app: send delete request to C# backend
-    alert(`Product "${selectedProductForDelete?.name}" deleted successfully! Connect to your C# backend to persist changes.`);
-    setSelectedProductForDelete(null);
+  const handleProductDelete = async () => {
+    if (!selectedProductForDelete) return;
+
+    try {
+      toast.loading('Deleting product...', { id: 'delete-product' });
+      await apiClient.deleteProduct(selectedProductForDelete.id);
+      toast.success(`Product "${selectedProductForDelete.name}" deleted successfully!`, { id: 'delete-product' });
+      setSelectedProductForDelete(null);
+      // Refresh products list
+      fetchProducts();
+    } catch (error) {
+      toast.error(`Failed to delete product: ${error instanceof Error ? error.message : 'Unknown error'}`, { id: 'delete-product' });
+    }
+  };
+
+  const handleToggleFeatured = async (product: Product) => {
+    try {
+      const updatedProduct = await apiClient.toggleProductFeatured(product.id);
+      toast.success(`Product "${product.name}" ${updatedProduct.isFeatured ? 'marked as featured' : 'removed from featured'}!`);
+      // Update the product in the local state
+      setProducts(products.map(p => p.id === updatedProduct.id ? updatedProduct : p));
+    } catch (error) {
+      toast.error(`Failed to update featured status: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   };
 
   const tabs = [
@@ -528,6 +549,7 @@ export function Dashboard() {
                         <th className="text-left py-3 px-4">Price</th>
                         <th className="text-left py-3 px-4">Stock</th>
                         <th className="text-left py-3 px-4">Status</th>
+                        <th className="text-center py-3 px-4">Featured</th>
                         <th className="text-left py-3 px-4">Actions</th>
                       </tr>
                     </thead>
@@ -580,6 +602,24 @@ export function Dashboard() {
                             }`}>
                               {product.isActive ? 'Active' : 'Inactive'}
                             </span>
+                          </td>
+                          <td className="py-3 px-4">
+                            <div className="flex justify-center">
+                              <button
+                                type='button'
+                                className="p-1.5 hover:bg-muted rounded transition-colors"
+                                title={product.isFeatured ? 'Remove from featured' : 'Mark as featured'}
+                                onClick={() => handleToggleFeatured(product)}
+                              >
+                                <Star
+                                  className={`h-5 w-5 transition-colors ${
+                                    product.isFeatured
+                                      ? 'fill-yellow-400 text-yellow-400'
+                                      : 'text-muted-foreground'
+                                  }`}
+                                />
+                              </button>
+                            </div>
                           </td>
                           <td className="py-3 px-4">
                             <div className="flex items-center gap-2">
