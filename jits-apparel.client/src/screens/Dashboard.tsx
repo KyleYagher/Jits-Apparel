@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../context/useAuth';
 import Papa from 'papaparse';
-import { apiClient, ProductUploadDto, Product } from '../services/api';
+import { apiClient, ProductUploadDto, Product, CarouselItem, CreateCarouselItemDto, UpdateCarouselItemDto, ReorderCarouselItemDto } from '../services/api';
 import { toast } from 'sonner';
 import {
   Package,
@@ -20,13 +20,21 @@ import {
   Trash2,
   Edit,
   Eye,
-  Star
+  Star,
+  GripVertical,
+  Power,
+  PowerOff
 } from 'lucide-react';
 import { ProductDetail } from '../components/ProductDetail';
 import { EditProduct } from '../components/EditProduct';
 import { DeleteConfirmation } from '../components/DeleteConfirmation';
 import { AddProduct, NewProductData } from '../components/AddProduct';
+import { AddCarouselItem } from '../components/AddCarouselItem';
+import { EditCarouselItem } from '../components/EditCarouselItem';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
+import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 // Mock data
 const salesData = [
@@ -62,6 +70,136 @@ const deliveryIntegrations = [
 
 type TabType = 'overview' | 'products' | 'carousel' | 'orders' | 'delivery' | 'analytics';
 
+// Sortable Carousel Item Component
+interface SortableCarouselItemProps {
+  item: CarouselItem;
+  onEdit: (item: CarouselItem) => void;
+  onDelete: (item: CarouselItem) => void;
+  onToggleActive: (item: CarouselItem) => void;
+}
+
+function SortableCarouselItem({ item, onEdit, onDelete, onToggleActive }: SortableCarouselItemProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: item.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  const gradientPreview = {
+    'pink-orange': 'linear-gradient(90deg, #ec4899 0%, #f97316 100%)',
+    'orange-yellow': 'linear-gradient(90deg, #f97316 0%, #eab308 100%)',
+    'yellow-cyan': 'linear-gradient(90deg, #eab308 0%, #06b6d4 100%)',
+    'cyan-pink': 'linear-gradient(90deg, #06b6d4 0%, #ec4899 100%)',
+  }[item.gradientStyle] || 'linear-gradient(90deg, #ec4899 0%, #f97316 100%)';
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className="bg-muted/30 border rounded-lg p-4 hover:bg-muted/50 transition-colors"
+    >
+      <div className="flex items-start gap-4">
+        {/* Drag Handle */}
+        <button
+          type="button"
+          {...attributes}
+          {...listeners}
+          className="mt-2 cursor-grab active:cursor-grabbing p-2 hover:bg-muted rounded transition-colors"
+          aria-label="Drag to reorder"
+        >
+          <GripVertical className="h-5 w-5 text-muted-foreground" />
+        </button>
+
+        {/* Image Preview */}
+        <div className="flex-shrink-0">
+          <img
+            src={item.imageUrl}
+            alt={item.title}
+            className="w-32 h-20 object-cover rounded border"
+            onError={(e) => {
+              e.currentTarget.src = 'https://via.placeholder.com/200x120?text=Image+Error';
+            }}
+          />
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex-1">
+              <h4 className="font-semibold text-sm mb-1">{item.title}</h4>
+              {item.description && (
+                <p className="text-xs text-muted-foreground mb-2 line-clamp-1">{item.description}</p>
+              )}
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <span className="px-2 py-1 bg-muted rounded">
+                  Order: {item.order}
+                </span>
+                <span className="px-2 py-1 rounded" style={{ background: gradientPreview, color: 'white' }}>
+                  {item.gradientStyle}
+                </span>
+                <span className="px-2 py-1 bg-muted rounded">
+                  Button: "{item.buttonText}"
+                </span>
+                {item.linkUrl && (
+                  <span className="px-2 py-1 bg-muted rounded flex items-center gap-1">
+                    <Eye className="h-3 w-3" />
+                    {item.linkUrl}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => onToggleActive(item)}
+                className={`p-2 rounded transition-colors ${
+                  item.isActive
+                    ? 'text-green-600 hover:bg-green-100 dark:hover:bg-green-900/30'
+                    : 'text-red-600 hover:bg-red-100 dark:hover:bg-red-900/30'
+                }`}
+                title={item.isActive ? 'Active - Click to deactivate' : 'Inactive - Click to activate'}
+              >
+                {item.isActive ? (
+                  <CheckCircle className="h-5 w-5" />
+                ) : (
+                  <XCircle className="h-5 w-5" />
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => onEdit(item)}
+                className="p-2 hover:bg-muted rounded transition-colors"
+                title="Edit"
+              >
+                <Edit className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+              </button>
+              <button
+                type="button"
+                onClick={() => onDelete(item)}
+                className="p-2 hover:bg-muted rounded transition-colors"
+                title="Delete"
+              >
+                <Trash2 className="h-4 w-4 text-red-600 dark:text-red-400" />
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function Dashboard() {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<TabType>('overview');
@@ -69,17 +207,21 @@ export function Dashboard() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [heroImages, setHeroImages] = useState<string[]>([
-    'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=800',
-    'https://images.unsplash.com/photo-1583743814966-8936f5b7be1a?w=800',
-    'https://images.unsplash.com/photo-1576566588028-4147f3842f27?w=800',
-  ]);
+
+  // Carousel state
+  const [carouselItems, setCarouselItems] = useState<CarouselItem[]>([]);
+  const [loadingCarousel, setLoadingCarousel] = useState(false);
 
   // Product modal states
   const [selectedProductForView, setSelectedProductForView] = useState<Product | null>(null);
   const [selectedProductForEdit, setSelectedProductForEdit] = useState<Product | null>(null);
   const [selectedProductForDelete, setSelectedProductForDelete] = useState<Product | null>(null);
   const [showAddProduct, setShowAddProduct] = useState(false);
+
+  // Carousel modal states
+  const [selectedCarouselItem, setSelectedCarouselItem] = useState<CarouselItem | null>(null);
+  const [showAddCarouselItem, setShowAddCarouselItem] = useState(false);
+  const [showEditCarouselItem, setShowEditCarouselItem] = useState(false);
 
   // Filter products based on search term
   const filteredProducts = products.filter((product) => {
@@ -189,22 +331,109 @@ export function Dashboard() {
     }
   };
 
-  const handleHeroImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        if (event.target?.result) {
-          setHeroImages([...heroImages, event.target.result as string]);
-        }
-      };
-      reader.readAsDataURL(file);
+  // Carousel handlers
+  const fetchCarouselItems = async () => {
+    try {
+      setLoadingCarousel(true);
+      const items = await apiClient.getAllCarouselItems();
+      setCarouselItems(items);
+    } catch (error) {
+      console.error('Error fetching carousel items:', error);
+      toast.error(`Failed to load carousel items: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setLoadingCarousel(false);
     }
   };
 
-  const removeHeroImage = (index: number) => {
-    setHeroImages(heroImages.filter((_, i) => i !== index));
+  const handleCarouselItemCreate = async (newItem: CreateCarouselItemDto) => {
+    try {
+      toast.loading('Creating carousel item...', { id: 'carousel-create' });
+      await apiClient.createCarouselItem(newItem);
+      toast.success('Carousel item created successfully!', { id: 'carousel-create' });
+      setShowAddCarouselItem(false);
+      fetchCarouselItems();
+    } catch (error) {
+      toast.error(`Failed to create carousel item: ${error instanceof Error ? error.message : 'Unknown error'}`, { id: 'carousel-create' });
+    }
   };
+
+  const handleCarouselItemUpdate = async (id: number, updates: UpdateCarouselItemDto) => {
+    try {
+      toast.loading('Updating carousel item...', { id: 'carousel-update' });
+      await apiClient.updateCarouselItem(id, updates);
+      toast.success('Carousel item updated successfully!', { id: 'carousel-update' });
+      setShowEditCarouselItem(false);
+      setSelectedCarouselItem(null);
+      fetchCarouselItems();
+    } catch (error) {
+      toast.error(`Failed to update carousel item: ${error instanceof Error ? error.message : 'Unknown error'}`, { id: 'carousel-update' });
+    }
+  };
+
+  const handleCarouselItemDelete = async (item: CarouselItem) => {
+    if (!confirm(`Are you sure you want to delete "${item.title}"?`)) return;
+
+    try {
+      toast.loading('Deleting carousel item...', { id: 'carousel-delete' });
+      await apiClient.deleteCarouselItem(item.id);
+      toast.success('Carousel item deleted successfully!', { id: 'carousel-delete' });
+      fetchCarouselItems();
+    } catch (error) {
+      toast.error(`Failed to delete carousel item: ${error instanceof Error ? error.message : 'Unknown error'}`, { id: 'carousel-delete' });
+    }
+  };
+
+  const handleToggleCarouselActive = async (item: CarouselItem) => {
+    try {
+      const updatedItem = await apiClient.toggleCarouselItemActive(item.id);
+      toast.success(`Carousel item ${updatedItem.isActive ? 'activated' : 'deactivated'}!`);
+      setCarouselItems(carouselItems.map(i => i.id === updatedItem.id ? updatedItem : i));
+    } catch (error) {
+      toast.error(`Failed to toggle active status: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
+  // Drag and drop sensors
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (over && active.id !== over.id) {
+      const oldIndex = carouselItems.findIndex(item => item.id === active.id);
+      const newIndex = carouselItems.findIndex(item => item.id === over.id);
+
+      const reorderedItems = arrayMove(carouselItems, oldIndex, newIndex);
+      setCarouselItems(reorderedItems);
+
+      // Update order values and send to backend
+      const reorderDtos: ReorderCarouselItemDto[] = reorderedItems.map((item, index) => ({
+        id: item.id,
+        order: index
+      }));
+
+      try {
+        await apiClient.reorderCarouselItems(reorderDtos);
+        toast.success('Carousel items reordered successfully!');
+      } catch (error) {
+        toast.error('Failed to save new order');
+        // Revert on error
+        fetchCarouselItems();
+      }
+    }
+  };
+
+  // Fetch carousel items when carousel tab is active
+  useEffect(() => {
+    if (activeTab === 'carousel') {
+      fetchCarouselItems();
+    }
+  }, [activeTab]);
 
   const handleProductAdd = async (newProductData: NewProductData) => {
     try {
@@ -663,50 +892,53 @@ export function Dashboard() {
         {activeTab === 'carousel' && (
           <div className="space-y-6">
             <div className="bg-card border rounded-lg p-6">
-              <h3 className="text-lg font-semibold mb-4">Manage Hero Carousel Images</h3>
-              <p className="text-sm text-muted-foreground mb-4">
-                Upload and manage the images displayed in the homepage hero carousel. Recommended size: 1920x600px
-              </p>
-
-              {/* Current Images */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                {heroImages.map((image, index) => (
-                  <div key={index} className="relative group">
-                    <img
-                      src={image}
-                      alt={`Hero ${index + 1}`}
-                      className="w-full h-48 object-cover rounded-lg border"
-                    />
-                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center gap-2">
-                      <button
-                        onClick={() => removeHeroImage(index)}
-                        className="px-3 py-1 bg-red-500 text-white rounded-md text-sm hover:bg-red-600 transition-colors"
-                      >
-                        Remove
-                      </button>
-                    </div>
-                    <div className="absolute top-2 left-2 bg-black/70 text-white px-2 py-1 rounded text-xs">
-                      Position {index + 1}
-                    </div>
-                  </div>
-                ))}
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="text-lg font-semibold">Manage Hero Carousel Items</h3>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {loadingCarousel ? 'Loading...' : `${carouselItems.length} carousel items`}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowAddCarouselItem(true)}
+                  className="px-4 py-2 rounded-md text-white text-sm transition-all hover:opacity-90"
+                  style={{ background: 'linear-gradient(90deg, var(--jits-pink) 0%, var(--jits-orange) 100%)' }}
+                >
+                  + Add Carousel Item
+                </button>
               </div>
 
-              {/* Upload New Image */}
-              <div className="border-2 border-dashed rounded-lg p-8 text-center">
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleHeroImageUpload}
-                  className="hidden"
-                  id="hero-upload"
-                />
-                <label htmlFor="hero-upload" className="cursor-pointer">
+              {loadingCarousel ? (
+                <div className="text-center py-12">
+                  <Package className="h-12 w-12 mx-auto text-muted-foreground animate-pulse mb-4" />
+                  <p className="text-muted-foreground">Loading carousel items...</p>
+                </div>
+              ) : carouselItems.length === 0 ? (
+                <div className="text-center py-12">
                   <ImageIcon className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                  <p className="font-medium mb-1">Add New Hero Image</p>
-                  <p className="text-sm text-muted-foreground">PNG, JPG up to 5MB</p>
-                </label>
-              </div>
+                  <p className="text-muted-foreground mb-2">No carousel items yet</p>
+                  <p className="text-sm text-muted-foreground">Click "Add Carousel Item" to create your first slide</p>
+                </div>
+              ) : (
+                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                  <SortableContext items={carouselItems.map(item => item.id)} strategy={verticalListSortingStrategy}>
+                    <div className="space-y-3">
+                      {carouselItems.map((item) => (
+                        <SortableCarouselItem
+                          key={item.id}
+                          item={item}
+                          onEdit={(item) => {
+                            setSelectedCarouselItem(item);
+                            setShowEditCarouselItem(true);
+                          }}
+                          onDelete={handleCarouselItemDelete}
+                          onToggleActive={handleToggleCarouselActive}
+                        />
+                      ))}
+                    </div>
+                  </SortableContext>
+                </DndContext>
+              )}
             </div>
           </div>
         )}
@@ -928,6 +1160,25 @@ export function Dashboard() {
           product={selectedProductForDelete}
           onClose={() => setSelectedProductForDelete(null)}
           onDelete={handleProductDelete}
+        />
+      )}
+
+      {/* Carousel Modals */}
+      {showAddCarouselItem && (
+        <AddCarouselItem
+          onClose={() => setShowAddCarouselItem(false)}
+          onSave={handleCarouselItemCreate}
+          maxOrder={carouselItems.length > 0 ? Math.max(...carouselItems.map(i => i.order)) : 0}
+        />
+      )}
+      {showEditCarouselItem && selectedCarouselItem && (
+        <EditCarouselItem
+          item={selectedCarouselItem}
+          onClose={() => {
+            setShowEditCarouselItem(false);
+            setSelectedCarouselItem(null);
+          }}
+          onSave={handleCarouselItemUpdate}
         />
       )}
     </div>

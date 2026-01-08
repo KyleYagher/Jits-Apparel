@@ -3,9 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { HeroCarousel } from '../components/HeroCarousel';
 import { ProductCard } from '../components/ProductCard';
 import { ProductDetail } from '../components/ProductDetail';
-import { apiClient, Product as ApiProduct } from '../services/api';
+import { apiClient, Product as ApiProduct, CarouselItem } from '../services/api';
 import { Product } from '../../types/types';
-import { JitsLogoText } from '../components/JitsLogoText'
 import '../App.css';
 
 export default function HomeScreen() {
@@ -14,6 +13,26 @@ export default function HomeScreen() {
   const [featuredProducts, setFeaturedProducts] = useState<Product[]>([]);
   const [featuredApiProducts, setFeaturedApiProducts] = useState<ApiProduct[]>([]);
   const [loadingFeatured, setLoadingFeatured] = useState(true);
+  const [carouselItems, setCarouselItems] = useState<CarouselItem[]>([]);
+  const [loadingCarousel, setLoadingCarousel] = useState(true);
+
+  // Fetch carousel items from the API
+  useEffect(() => {
+    const fetchCarouselItems = async () => {
+      try {
+        setLoadingCarousel(true);
+        const items = await apiClient.getCarouselItems();
+        setCarouselItems(items);
+      } catch (error) {
+        console.error('Error fetching carousel items:', error);
+        // If error, carousel will use hardcoded defaults
+      } finally {
+        setLoadingCarousel(false);
+      }
+    };
+
+    fetchCarouselItems();
+  }, []);
 
   // Fetch featured products from the API
   useEffect(() => {
@@ -55,16 +74,11 @@ export default function HomeScreen() {
   return (
     <>
       {/* Hero Section */}
-      <section 
-        className="py-5 justify-items-center-safe"
-        style={{ 
-          background: 'linear-gradient(135deg, rgba(236, 72, 153, 0.05) 0%, rgba(6, 182, 212, 0.05) 100%)'
-        }}
-      >
+      <section className="justify-items-center-safe">
         <HeroCarousel
+          slides={!loadingCarousel ? carouselItems : undefined}
           onShopClick={() => navigate('shop')}
         />
-        
       </section>
 
       {/* Featured Products - Only show if there are featured products */}
