@@ -105,6 +105,10 @@ export class ApiClient {
   async deleteProduct(id: number): Promise<void> {
     return this.delete<void>(`/products/${id}`);
   }
+
+  async toggleProductFeatured(id: number): Promise<Product> {
+    return this.request<Product>(`/products/${id}/toggle-featured`, { method: 'PATCH' });
+  }
 }
 
 export interface Product {
@@ -115,6 +119,7 @@ export interface Product {
   stockQuantity: number;
   imageUrl?: string;
   isActive: boolean;
+  isFeatured: boolean;
   createdAt: string;
   updatedAt?: string;
   categoryId: number;
@@ -141,6 +146,7 @@ export interface CreateProductDto {
   imageUrl?: string;
   categoryId: number;
   isActive: boolean;
+  isFeatured: boolean;
 }
 
 export interface ProductUploadResult {

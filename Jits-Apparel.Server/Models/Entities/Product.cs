@@ -9,6 +9,7 @@ public class Product
     public int StockQuantity { get; set; }
     public string? ImageUrl { get; set; }
     public bool IsActive { get; set; } = true;
+    public bool IsFeatured { get; set; } = false;
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
 

@@ -38,6 +38,7 @@ public class ProductsController : ControllerBase
                     StockQuantity = p.StockQuantity,
                     ImageUrl = p.ImageUrl,
                     IsActive = p.IsActive,
+                    IsFeatured = p.IsFeatured,
                     CreatedAt = p.CreatedAt,
                     UpdatedAt = p.UpdatedAt,
                     CategoryId = p.CategoryId,
@@ -123,6 +124,7 @@ public class ProductsController : ControllerBase
                 ImageUrl = createProductDto.ImageUrl,
                 CategoryId = createProductDto.CategoryId,
                 IsActive = createProductDto.IsActive,
+                IsFeatured = createProductDto.IsFeatured,
                 CreatedAt = DateTime.UtcNow
             };
 
@@ -141,6 +143,7 @@ public class ProductsController : ControllerBase
                 StockQuantity = product.StockQuantity,
                 ImageUrl = product.ImageUrl,
                 IsActive = product.IsActive,
+                IsFeatured = product.IsFeatured,
                 CreatedAt = product.CreatedAt,
                 UpdatedAt = product.UpdatedAt,
                 CategoryId = product.CategoryId,
@@ -210,6 +213,53 @@ public class ProductsController : ControllerBase
         {
             _logger.LogError(ex, "Error deleting product {ProductId}", id);
             return StatusCode(500, "An error occurred while deleting the product");
+        }
+    }
+
+    // PATCH: api/products/5/toggle-featured
+    [HttpPatch("{id}/toggle-featured")]
+    [Authorize(Roles = "Admin")]
+    public async Task<ActionResult<ProductDto>> ToggleFeatured(int id)
+    {
+        try
+        {
+            var product = await _context.Products
+                .Include(p => p.Category)
+                .FirstOrDefaultAsync(p => p.Id == id);
+
+            if (product == null)
+                return NotFound();
+
+            product.IsFeatured = !product.IsFeatured;
+            product.UpdatedAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync();
+
+            var productDto = new ProductDto
+            {
+                Id = product.Id,
+                Name = product.Name,
+                Price = product.Price,
+                Description = product.Description,
+                StockQuantity = product.StockQuantity,
+                ImageUrl = product.ImageUrl,
+                IsActive = product.IsActive,
+                IsFeatured = product.IsFeatured,
+                CreatedAt = product.CreatedAt,
+                UpdatedAt = product.UpdatedAt,
+                CategoryId = product.CategoryId,
+                Category = new CategoryDto
+                {
+                    Id = product.Category.Id,
+                    Name = product.Category.Name
+                }
+            };
+
+            return Ok(productDto);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error toggling featured status for product {ProductId}", id);
+            return StatusCode(500, "An error occurred while updating the product");
         }
     }
 

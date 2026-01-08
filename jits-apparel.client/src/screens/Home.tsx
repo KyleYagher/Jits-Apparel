@@ -1,52 +1,59 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { HeroCarousel } from '../components/HeroCarousel';
 import { ProductCard } from '../components/ProductCard';
 import { ProductDetail } from '../components/ProductDetail';
-import { ApiTest } from '../components/ApiTest';
-import { products } from '../../data/products';
+import { apiClient, Product as ApiProduct } from '../services/api';
 import { Product } from '../../types/types';
+import { JitsLogoText } from '../components/JitsLogoText'
 import '../App.css';
 
 export default function HomeScreen() {
   const navigate = useNavigate();
-  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-  const featuredProducts = products.filter(p => p.featured);
-  // // Success notification
-  // toast.success('Item added to cart!');
+  const [selectedProduct, setSelectedProduct] = useState<ApiProduct | null>(null);
+  const [featuredProducts, setFeaturedProducts] = useState<Product[]>([]);
+  const [featuredApiProducts, setFeaturedApiProducts] = useState<ApiProduct[]>([]);
+  const [loadingFeatured, setLoadingFeatured] = useState(true);
 
-  // // Error notification
-  // toast.error('Failed to process payment');
+  // Fetch featured products from the API
+  useEffect(() => {
+    const fetchFeaturedProducts = async () => {
+      try {
+        setLoadingFeatured(true);
+        const allProducts = await apiClient.getProducts();
+        // Filter for featured products
+        const featuredFromApi = allProducts.filter(p => p.isFeatured);
+        setFeaturedApiProducts(featuredFromApi);
+        // Map to the Product type for ProductCard
+        const featured = featuredFromApi.map(apiProduct => mapApiProductToProduct(apiProduct));
+        setFeaturedProducts(featured);
+      } catch (error) {
+        console.error('Error fetching featured products:', error);
+      } finally {
+        setLoadingFeatured(false);
+      }
+    };
 
-  // // Info notification
-  // toast.info('Your order is being prepared');
+    fetchFeaturedProducts();
+  }, []);
 
-  // // Warning notification
-  // toast.warning('Low stock remaining');
-
-  // // Loading notification
-  // toast.loading('Processing...');
-
-  // // Promise notification (auto-updates based on promise state)
-  // toast.promise(fetchData(), {
-  //   loading: 'Loading...',
-  //   success: 'Data loaded!',
-  //   error: 'Failed to load data'
-  // });
-
-  // // Custom notification with actions
-  // toast('Order placed', {
-  //   description: 'Your order #12345 has been confirmed',
-  //   action: {
-  //     label: 'View',
-  //     onClick: () => console.log('View order')
-  //   }
-  // });
+  // Map API Product to local Product type
+  const mapApiProductToProduct = (apiProduct: ApiProduct): Product => {
+    return {
+      id: apiProduct.id.toString(),
+      name: apiProduct.name,
+      price: apiProduct.price,
+      description: apiProduct.description || '',
+      image: apiProduct.imageUrl || '',
+      category: apiProduct.category?.name || 'Uncategorized',
+      sizes: ['S', 'M', 'L', 'XL', 'XXL'], // Default sizes
+      colors: ['Black', 'White', 'Navy'], // Default colors
+      featured: apiProduct.isFeatured,
+    };
+  };
 
   return (
     <>
-
-      
       {/* Hero Section */}
       <section 
         className="py-5 justify-items-center-safe"
@@ -60,33 +67,44 @@ export default function HomeScreen() {
         
       </section>
 
-      {/* API Integration Test */}
-      <section className="py-8 px-4 bg-muted/20">
-        <div className="max-w-6xl mx-auto">
-          <ApiTest />
-        </div>
-      </section>
-
-      {/* Featured Products */}
-      <section className="py-16 px-4">
-        <div className="max-w-6xl mx-auto">
-          <div className="text-center mb-12">
-            <h2 className="mb-4">Featured Collection</h2>
-            <p className="text-muted-foreground">
-              Our most popular designs that everyone's talking about
-            </p>
+      {/* Featured Products - Only show if there are featured products */}
+      {loadingFeatured ? (
+        <section className="py-16 px-4">
+          <div className="max-w-6xl mx-auto">
+            <div className="text-center">
+              <div className="animate-pulse">
+                <div className="h-8 bg-muted rounded w-64 mx-auto mb-4"></div>
+                <div className="h-4 bg-muted rounded w-96 mx-auto"></div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-12">
+                {[1, 2, 3].map(i => (
+                  <div key={i} className="h-96 bg-muted rounded-lg animate-pulse"></div>
+                ))}
+              </div>
+            </div>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {featuredProducts.map(product => (
-              <ProductCard
-                key={product.id}
-                product={product}
-                onClick={() => setSelectedProduct(product)}
-              />
-            ))}
+        </section>
+      ) : featuredProducts.length > 0 ? (
+        <section className="py-16 px-4">
+          <div className="max-w-6xl mx-auto">
+            <div className="text-center mb-12">
+              <h2 className="mb-4">Featured Collection</h2>
+              <p className="text-muted-foreground">
+                Our most popular designs that everyone's talking about
+              </p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {featuredProducts.map((product, index) => (
+                <ProductCard
+                  key={product.id}
+                  product={product}
+                  onClick={() => setSelectedProduct(featuredApiProducts[index])}
+                />
+              ))}
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      ) : null}
 
       {/* Brand Values */}
       <section className="py-16 px-4 bg-muted/30">
@@ -133,9 +151,3 @@ export default function HomeScreen() {
     </>
   );
 }
-
-// function fetchData(): Promise<unknown> | (() => Promise<unknown>) {
-//   return new Promise((resolve) => {
-//     setTimeout(() => resolve({ data: 'Sample data' }), 2000);
-//   });
-// }

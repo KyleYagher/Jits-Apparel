@@ -9,6 +9,7 @@ public class ProductDto
     public int StockQuantity { get; set; }
     public string? ImageUrl { get; set; }
     public bool IsActive { get; set; }
+    public bool IsFeatured { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
     public int CategoryId { get; set; }
@@ -40,6 +41,7 @@ public class CreateProductDto
     public string? ImageUrl { get; set; }
     public int CategoryId { get; set; }
     public bool IsActive { get; set; } = true;
+    public bool IsFeatured { get; set; } = false;
 }
 
 public class ProductUploadResult
