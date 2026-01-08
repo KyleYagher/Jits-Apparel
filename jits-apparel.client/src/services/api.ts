@@ -53,6 +53,11 @@ export class ApiClient {
       throw new Error(errorMessage);
     }
 
+    // Handle responses with no content (204 No Content)
+    if (response.status === 204 || response.headers.get('content-length') === '0') {
+      return undefined as T;
+    }
+
     return response.json();
   }
 
@@ -65,6 +70,10 @@ export class ApiClient {
       method: 'POST',
       body: data ? JSON.stringify(data) : undefined,
     });
+  }
+
+  async delete<T>(endpoint: string): Promise<T> {
+    return this.request<T>(endpoint, { method: 'DELETE' });
   }
 
   // Authentication endpoints
@@ -91,6 +100,10 @@ export class ApiClient {
 
   async createProduct(product: CreateProductDto): Promise<Product> {
     return this.post<Product>('/products', product);
+  }
+
+  async deleteProduct(id: number): Promise<void> {
+    return this.delete<void>(`/products/${id}`);
   }
 }
 

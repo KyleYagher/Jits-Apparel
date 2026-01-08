@@ -224,10 +224,19 @@ export function Dashboard() {
     setSelectedProductForEdit(null);
   };
 
-  const handleProductDelete = () => {
-    // In real app: send delete request to C# backend
-    alert(`Product "${selectedProductForDelete?.name}" deleted successfully! Connect to your C# backend to persist changes.`);
-    setSelectedProductForDelete(null);
+  const handleProductDelete = async () => {
+    if (!selectedProductForDelete) return;
+
+    try {
+      toast.loading('Deleting product...', { id: 'delete-product' });
+      await apiClient.deleteProduct(selectedProductForDelete.id);
+      toast.success(`Product "${selectedProductForDelete.name}" deleted successfully!`, { id: 'delete-product' });
+      setSelectedProductForDelete(null);
+      // Refresh products list
+      fetchProducts();
+    } catch (error) {
+      toast.error(`Failed to delete product: ${error instanceof Error ? error.message : 'Unknown error'}`, { id: 'delete-product' });
+    }
   };
 
   const tabs = [
