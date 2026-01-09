@@ -30,6 +30,7 @@ import { AddProduct, NewProductData } from '../components/AddProduct';
 import { AddCarouselItem } from '../components/AddCarouselItem';
 import { EditCarouselItem } from '../components/EditCarouselItem';
 import { SplashScreen } from '../components/SplashScreen';
+import { OrderDetails, DetailedOrder } from '../components/OrderDetails';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
@@ -119,7 +120,7 @@ function SortableCarouselItem({ item, onEdit, onDelete, onToggleActive }: Sortab
         </button>
 
         {/* Image Preview */}
-        <div className="flex-shrink-0">
+        <div className="shrink-0">
           <img
             src={item.imageUrl}
             alt={item.title}
@@ -216,6 +217,109 @@ export function Dashboard() {
   const [selectedProductForEdit, setSelectedProductForEdit] = useState<Product | null>(null);
   const [selectedProductForDelete, setSelectedProductForDelete] = useState<Product | null>(null);
   const [showAddProduct, setShowAddProduct] = useState(false);
+
+  // Order modal state
+  const [selectedOrder, setSelectedOrder] = useState<DetailedOrder | null>(null);
+
+  // Function to convert basic order to detailed order
+  const getDetailedOrder = (basicOrder: typeof recentOrders[0]): DetailedOrder => {
+    return {
+      ...basicOrder,
+      status: basicOrder.status as DetailedOrder['status'],
+      customerEmail: `${basicOrder.customer.toLowerCase().replace(' ', '.')}@example.com`,
+      customerPhone: '+27 ' + Math.floor(Math.random() * 900000000 + 100000000),
+      customerType: Math.random() > 0.5 ? 'Registered' : 'Guest',
+      paymentStatus: basicOrder.status === 'pending' ? 'Pending' : 'Paid',
+      paymentMethod: 'Credit Card (•••• 4242)',
+      shippingAddress: {
+        fullName: basicOrder.customer,
+        addressLine1: '123 Main Street',
+        addressLine2: 'Apartment 4B',
+        city: 'Cape Town',
+        province: 'Western Cape',
+        postalCode: '8001',
+        country: 'South Africa',
+      },
+      shippingMethod: 'Standard Delivery (3-5 business days)',
+      trackingNumber: basicOrder.status === 'shipped' || basicOrder.status === 'delivered' ? `TCG${Math.floor(Math.random() * 1000000000)}` : undefined,
+      deliveryNotes: 'Please leave package at the front door if not home',
+      items: [
+        {
+          id: '1',
+          productName: 'Jits Sunset Tee',
+          productImage: 'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=200',
+          sku: 'JST-001-BLK-L',
+          variant: 'Size: L, Color: Black',
+          quantity: 1,
+          unitPrice: 599,
+          lineTotal: 599,
+        },
+        ...(parseFloat(basicOrder.amount.replace('R', '')) > 600 ? [{
+          id: '2',
+          productName: 'Classic Plain White',
+          productImage: 'https://images.unsplash.com/photo-1583743814966-8936f5b7be1a?w=200',
+          sku: 'CPW-001-WHT-M',
+          variant: 'Size: M, Color: White',
+          quantity: 1,
+          unitPrice: 549,
+          lineTotal: 549,
+        }] : []),
+      ],
+      subtotal: parseFloat(basicOrder.amount.replace('R', '')) - 150,
+      discount: 0,
+      tax: Math.round((parseFloat(basicOrder.amount.replace('R', '')) - 150) * 0.15),
+      shipping: 65,
+      total: parseFloat(basicOrder.amount.replace('R', '')),
+      timeline: [
+        {
+          status: 'Order Placed',
+          timestamp: `${basicOrder.date} 10:14 AM`,
+          description: 'Your order has been received and is being processed',
+          completed: true,
+        },
+        {
+          status: 'Payment Confirmed',
+          timestamp: `${basicOrder.date} 10:15 AM`,
+          description: 'Payment has been successfully processed',
+          completed: basicOrder.status !== 'pending',
+        },
+        {
+          status: 'Processing',
+          timestamp: `${basicOrder.date} 11:02 AM`,
+          description: 'Your order is being prepared for shipment',
+          completed: ['processing', 'shipped', 'delivered'].includes(basicOrder.status),
+        },
+        {
+          status: 'Shipped',
+          timestamp: new Date(new Date(basicOrder.date).getTime() + 86400000).toISOString().split('T')[0] + ' 09:20 AM',
+          description: 'Your order has been dispatched',
+          completed: ['shipped', 'delivered'].includes(basicOrder.status),
+        },
+        {
+          status: 'Delivered',
+          timestamp: 'Pending',
+          description: 'Your order will be delivered soon',
+          completed: basicOrder.status === 'delivered',
+        },
+      ],
+      notes: [
+        {
+          id: '1',
+          text: 'Customer requested gift wrapping',
+          author: 'Admin',
+          timestamp: `${basicOrder.date} 10:20 AM`,
+          internal: true,
+        },
+        {
+          id: '2',
+          text: 'Please deliver before 5 PM',
+          author: basicOrder.customer,
+          timestamp: `${basicOrder.date} 10:14 AM`,
+          internal: false,
+        },
+      ],
+    };
+  };
 
   // Carousel modal states
   const [selectedCarouselItem, setSelectedCarouselItem] = useState<CarouselItem | null>(null);
@@ -420,7 +524,7 @@ export function Dashboard() {
         await apiClient.reorderCarouselItems(reorderDtos);
         toast.success('Carousel items reordered successfully!');
       } catch (error) {
-        toast.error('Failed to save new order');
+        toast.error(`Failed to save new order ${error instanceof Error ? error.message : 'Unknown error'}`);
         // Revert on error
         fetchCarouselItems();
       }
@@ -896,6 +1000,7 @@ export function Dashboard() {
                   </p>
                 </div>
                 <button
+                  type='button'
                   onClick={() => setShowAddCarouselItem(true)}
                   className="px-4 py-2 rounded-md text-white text-sm transition-all hover:opacity-90"
                   style={{ background: 'linear-gradient(90deg, var(--jits-pink) 0%, var(--jits-orange) 100%)' }}
@@ -985,7 +1090,12 @@ export function Dashboard() {
                         </td>
                         <td className="py-3 px-4 text-sm text-muted-foreground">{order.date}</td>
                         <td className="py-3 px-4">
-                          <button className="text-sm text-pink-600 dark:text-pink-400 hover:underline">
+                          <button 
+                            className="text-sm text-pink-600 dark:text-pink-400 hover:underline"
+                            onClick={() => {
+                              setSelectedOrder(getDetailedOrder(order));
+                            }}
+                          >
                             View Details
                           </button>
                         </td>
@@ -1172,6 +1282,12 @@ export function Dashboard() {
             setSelectedCarouselItem(null);
           }}
           onSave={handleCarouselItemUpdate}
+        />
+      )}
+      {selectedOrder && (
+        <OrderDetails
+          order={selectedOrder}
+          onClose={() => setSelectedOrder(null)}
         />
       )}
     </div>
