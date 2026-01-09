@@ -12,7 +12,10 @@ export function ThemeToggle() {
   ];
 
   return (
-    <div className="flex items-center gap-1 p-1 rounded-full" style={{ backgroundColor: '#262626' }}>
+    <div className="flex items-center gap-1 p-1 rounded-full"
+      style={{
+        background: 'linear-gradient(135deg, rgba(236, 72, 153, 0.1) 0%, rgba(6, 182, 212, 0.1) 100%)'
+        }}>
       {themes.map(({ value, icon: Icon, label }) => (
         <Button
           type='button'

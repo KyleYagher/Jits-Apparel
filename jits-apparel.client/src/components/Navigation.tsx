@@ -33,7 +33,7 @@ export function Navigation({ onNavigate, currentPage, onCartClick }: NavigationP
   ];
 
   return (
-    <nav className="sticky top-0 z-50 bg-card border-b border-gray-800 backdrop-blur-sm">
+    <nav className="sticky top-0 z-50 border-b shadow-sm backdrop-blur-sm">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-20">
           {/* Logo */}
