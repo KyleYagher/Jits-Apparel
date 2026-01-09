@@ -109,6 +109,70 @@ export class ApiClient {
   async toggleProductFeatured(id: number): Promise<Product> {
     return this.request<Product>(`/products/${id}/toggle-featured`, { method: 'PATCH' });
   }
+
+  // Carousel endpoints
+  async getCarouselItems(): Promise<CarouselItem[]> {
+    return this.get<CarouselItem[]>('/carousel');
+  }
+
+  async getAllCarouselItems(): Promise<CarouselItem[]> {
+    return this.get<CarouselItem[]>('/carousel/all');
+  }
+
+  async getCarouselItem(id: number): Promise<CarouselItem> {
+    return this.get<CarouselItem>(`/carousel/${id}`);
+  }
+
+  async createCarouselItem(item: CreateCarouselItemDto): Promise<CarouselItem> {
+    return this.post<CarouselItem>('/carousel', item);
+  }
+
+  async updateCarouselItem(id: number, item: UpdateCarouselItemDto): Promise<void> {
+    return this.request<void>(`/carousel/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(item),
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+
+  async deleteCarouselItem(id: number): Promise<void> {
+    return this.delete<void>(`/carousel/${id}`);
+  }
+
+  async toggleCarouselItemActive(id: number): Promise<CarouselItem> {
+    return this.request<CarouselItem>(`/carousel/${id}/toggle-active`, {
+      method: 'PATCH'
+    });
+  }
+
+  async reorderCarouselItems(items: ReorderCarouselItemDto[]): Promise<void> {
+    return this.request<void>('/carousel/reorder', {
+      method: 'PATCH',
+      body: JSON.stringify(items),
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+
+  async uploadCarouselImage(file: File): Promise<ImageUploadResponse> {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const token = this.getAuthToken();
+    const response = await fetch(`${API_BASE_URL}/carousel/upload`, {
+      method: 'POST',
+      headers: {
+        ...(token && { 'Authorization': `Bearer ${token}` })
+      },
+      body: formData
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(error || 'Failed to upload image');
+    }
+
+    return response.json();
+  }
 }
 
 export interface Product {
@@ -158,6 +222,52 @@ export interface ProductUploadResult {
     productName: string;
     error: string;
   }>;
+}
+
+export interface CarouselItem {
+  id: number;
+  title: string;
+  description?: string;
+  imageUrl: string;
+  buttonText: string;
+  linkUrl?: string;
+  gradientStyle: string;
+  order: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface CreateCarouselItemDto {
+  title: string;
+  description?: string;
+  imageUrl: string;
+  buttonText: string;
+  linkUrl?: string;
+  gradientStyle: string;
+  order: number;
+  isActive: boolean;
+}
+
+export interface UpdateCarouselItemDto {
+  title: string;
+  description?: string;
+  imageUrl: string;
+  buttonText: string;
+  linkUrl?: string;
+  gradientStyle: string;
+  order: number;
+  isActive: boolean;
+}
+
+export interface ReorderCarouselItemDto {
+  id: number;
+  order: number;
+}
+
+export interface ImageUploadResponse {
+  imageUrl: string;
+  fileName: string;
 }
 
 export const apiClient = new ApiClient();

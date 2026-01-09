@@ -3,9 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { HeroCarousel } from '../components/HeroCarousel';
 import { ProductCard } from '../components/ProductCard';
 import { ProductDetail } from '../components/ProductDetail';
-import { apiClient, Product as ApiProduct } from '../services/api';
+import { SplashScreen } from '../components/SplashScreen';
+import { apiClient, Product as ApiProduct, CarouselItem } from '../services/api';
 import { Product } from '../../types/types';
-import { JitsLogoText } from '../components/JitsLogoText'
 import '../App.css';
 
 export default function HomeScreen() {
@@ -14,6 +14,26 @@ export default function HomeScreen() {
   const [featuredProducts, setFeaturedProducts] = useState<Product[]>([]);
   const [featuredApiProducts, setFeaturedApiProducts] = useState<ApiProduct[]>([]);
   const [loadingFeatured, setLoadingFeatured] = useState(true);
+  const [carouselItems, setCarouselItems] = useState<CarouselItem[]>([]);
+  const [loadingCarousel, setLoadingCarousel] = useState(true);
+
+  // Fetch carousel items from the API
+  useEffect(() => {
+    const fetchCarouselItems = async () => {
+      try {
+        setLoadingCarousel(true);
+        const items = await apiClient.getCarouselItems();
+        setCarouselItems(items);
+      } catch (error) {
+        console.error('Error fetching carousel items:', error);
+        // If error, carousel will use hardcoded defaults
+      } finally {
+        setLoadingCarousel(false);
+      }
+    };
+
+    fetchCarouselItems();
+  }, []);
 
   // Fetch featured products from the API
   useEffect(() => {
@@ -55,33 +75,18 @@ export default function HomeScreen() {
   return (
     <>
       {/* Hero Section */}
-      <section 
-        className="py-5 justify-items-center-safe"
-        style={{ 
-          background: 'linear-gradient(135deg, rgba(236, 72, 153, 0.05) 0%, rgba(6, 182, 212, 0.05) 100%)'
-        }}
-      >
+      <section className="justify-items-center-safe">
         <HeroCarousel
+          slides={!loadingCarousel ? carouselItems : undefined}
           onShopClick={() => navigate('shop')}
         />
-        
       </section>
 
       {/* Featured Products - Only show if there are featured products */}
       {loadingFeatured ? (
         <section className="py-16 px-4">
           <div className="max-w-6xl mx-auto">
-            <div className="text-center">
-              <div className="animate-pulse">
-                <div className="h-8 bg-muted rounded w-64 mx-auto mb-4"></div>
-                <div className="h-4 bg-muted rounded w-96 mx-auto"></div>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-12">
-                {[1, 2, 3].map(i => (
-                  <div key={i} className="h-96 bg-muted rounded-lg animate-pulse"></div>
-                ))}
-              </div>
-            </div>
+            <SplashScreen mode="inline" show={true} message="Loading featured products..." size="md" minHeight="300px" />
           </div>
         </section>
       ) : featuredProducts.length > 0 ? (

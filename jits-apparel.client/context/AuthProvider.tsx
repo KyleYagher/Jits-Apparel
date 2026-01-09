@@ -25,8 +25,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       return null;
     });
-    const [isLoading] = useState(false);
-  
+    const [isLoading, setIsLoading] = useState(true); // Start as true for initial session verification
+
     // Login function - calls the .NET Core Identity API
     const login = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
       try {
@@ -130,6 +130,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             logout();
           }
         }
+        setIsLoading(false);
       };
 
       verifySession();
