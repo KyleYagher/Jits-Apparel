@@ -1,5 +1,5 @@
 @import "tailwindcss";
-@custom-variant dark (&:is(.dark *));
+@custom-variant dark (&:where(.dark, .dark *));
 
 :root {
   --font-size: 16px;
@@ -157,11 +157,13 @@
   --color-sidebar-ring: var(--sidebar-ring);
 }
 
-@layer base {
-  * {
-    @apply border-border outline-ring/50;
-  }
+*,
+*::before,
+*::after {
+  border-color: var(--border);
+}
 
+@layer base {
   body {
     @apply bg-background text-foreground;
   }
@@ -224,4 +226,59 @@
 
 html {
   font-size: var(--font-size);
+}
+
+/* Carousel Customization for Jits Brand */
+.slick-dots {
+  bottom: 25px;
+}
+
+.slick-dots li button:before {
+  font-size: 12px;
+  color: var(--jits-pink);
+  opacity: 0.5;
+}
+
+.slick-dots li.slick-active button:before {
+  color: var(--jits-pink);
+  opacity: 1;
+}
+
+.slick-prev,
+.slick-next {
+  z-index: 10;
+}
+
+.slick-prev:before,
+.slick-next:before {
+  font-size: 30px;
+  color: var(--jits-orange);
+  opacity: 0.8;
+}
+
+.slick-prev:hover:before,
+.slick-next:hover:before {
+  opacity: 1;
+}
+
+.slick-prev {
+  left: 25px;
+}
+
+.slick-next {
+  right: 25px;
+}
+
+/* Dark mode carousel styles */
+.dark .slick-dots li button:before {
+  color: var(--jits-cyan);
+}
+
+.dark .slick-dots li.slick-active button:before {
+  color: var(--jits-cyan);
+}
+
+.dark .slick-prev:before,
+.dark .slick-next:before {
+  color: var(--jits-yellow);
 }
