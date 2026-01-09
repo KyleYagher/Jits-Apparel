@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { HeroCarousel } from '../components/HeroCarousel';
 import { ProductCard } from '../components/ProductCard';
 import { ProductDetail } from '../components/ProductDetail';
+import { SplashScreen } from '../components/SplashScreen';
 import { apiClient, Product as ApiProduct, CarouselItem } from '../services/api';
 import { Product } from '../../types/types';
 import '../App.css';
@@ -85,17 +86,7 @@ export default function HomeScreen() {
       {loadingFeatured ? (
         <section className="py-16 px-4">
           <div className="max-w-6xl mx-auto">
-            <div className="text-center">
-              <div className="animate-pulse">
-                <div className="h-8 bg-muted rounded w-64 mx-auto mb-4"></div>
-                <div className="h-4 bg-muted rounded w-96 mx-auto"></div>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-12">
-                {[1, 2, 3].map(i => (
-                  <div key={i} className="h-96 bg-muted rounded-lg animate-pulse"></div>
-                ))}
-              </div>
-            </div>
+            <SplashScreen mode="inline" show={true} message="Loading featured products..." size="md" minHeight="300px" />
           </div>
         </section>
       ) : featuredProducts.length > 0 ? (

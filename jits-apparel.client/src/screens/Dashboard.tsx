@@ -21,9 +21,7 @@ import {
   Edit,
   Eye,
   Star,
-  GripVertical,
-  Power,
-  PowerOff
+  GripVertical
 } from 'lucide-react';
 import { ProductDetail } from '../components/ProductDetail';
 import { EditProduct } from '../components/EditProduct';
@@ -31,6 +29,7 @@ import { DeleteConfirmation } from '../components/DeleteConfirmation';
 import { AddProduct, NewProductData } from '../components/AddProduct';
 import { AddCarouselItem } from '../components/AddCarouselItem';
 import { EditCarouselItem } from '../components/EditCarouselItem';
+import { SplashScreen } from '../components/SplashScreen';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
@@ -753,10 +752,7 @@ export function Dashboard() {
 
               <div className="overflow-x-auto">
                 {loadingProducts ? (
-                  <div className="text-center py-12">
-                    <Package className="h-12 w-12 mx-auto text-muted-foreground animate-pulse mb-4" />
-                    <p className="text-muted-foreground">Loading products from database...</p>
-                  </div>
+                  <SplashScreen mode="inline" show={true} message="Loading products..." size="sm" minHeight="200px" />
                 ) : products.length === 0 ? (
                   <div className="text-center py-12">
                     <Package className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
@@ -909,10 +905,7 @@ export function Dashboard() {
               </div>
 
               {loadingCarousel ? (
-                <div className="text-center py-12">
-                  <Package className="h-12 w-12 mx-auto text-muted-foreground animate-pulse mb-4" />
-                  <p className="text-muted-foreground">Loading carousel items...</p>
-                </div>
+                <SplashScreen mode="inline" show={true} message="Loading carousel items..." size="sm" minHeight="200px" />
               ) : carouselItems.length === 0 ? (
                 <div className="text-center py-12">
                   <ImageIcon className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
