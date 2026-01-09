@@ -172,11 +172,12 @@ export function HeroCarousel({ slides: carouselItems, onShopClick }: HeroCarouse
                   </div>
 
                   {/* Divider */}
-                  <div className="w-[10px] bg-white rounded-full flex-shrink-0" style={{ height: '200px' }} />
+                  <div className="w-2.5 bg-white rounded-full shrink-0" style={{ height: '200px' }} />
 
                   {/* Right column */}
-                  <div className="flex-shrink-0 flex items-center justify-center">
+                  <div className="shrink-0 flex items-center justify-center">
                     <button
+                      type='button'
                       onClick={() => handleButtonClick(slide)}
                       className="px-8 py-4 rounded-lg text-white text-lg transition-all hover:opacity-90 hover:scale-105 shadow-lg"
                       style={{ background: slide.gradientStyle }}
