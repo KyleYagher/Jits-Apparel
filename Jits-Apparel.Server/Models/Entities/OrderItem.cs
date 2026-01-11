@@ -6,6 +6,8 @@ public class OrderItem
     public int Quantity { get; set; }
     public decimal UnitPrice { get; set; }
     public decimal Subtotal { get; set; }
+    public string? Size { get; set; }
+    public string? Color { get; set; }
 
     public int OrderId { get; set; }
     public int ProductId { get; set; }

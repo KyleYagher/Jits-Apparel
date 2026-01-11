@@ -76,6 +76,13 @@ export class ApiClient {
     return this.request<T>(endpoint, { method: 'DELETE' });
   }
 
+  async put<T>(endpoint: string, data?: unknown): Promise<T> {
+    return this.request<T>(endpoint, {
+      method: 'PUT',
+      body: data ? JSON.stringify(data) : undefined,
+    });
+  }
+
   // Authentication endpoints
   async login(credentials: LoginRequest): Promise<AuthResponse> {
     return this.post<AuthResponse>('/auth/login', credentials);
@@ -173,6 +180,52 @@ export class ApiClient {
 
     return response.json();
   }
+
+  // Order endpoints - Customer
+  async createOrder(request: CreateOrderRequest): Promise<Order> {
+    return this.post<Order>('/orders', request);
+  }
+
+  async getMyOrders(): Promise<OrderSummary[]> {
+    return this.get<OrderSummary[]>('/orders/my-orders');
+  }
+
+  async getMyOrder(id: number): Promise<Order> {
+    return this.get<Order>(`/orders/my-orders/${id}`);
+  }
+
+  // Order endpoints - Admin
+  async getAllOrders(params?: {
+    page?: number;
+    pageSize?: number;
+    status?: string;
+    search?: string;
+    fromDate?: string;
+    toDate?: string;
+  }): Promise<PaginatedOrderResponse> {
+    const queryParams = new URLSearchParams();
+    if (params?.page) queryParams.set('page', params.page.toString());
+    if (params?.pageSize) queryParams.set('pageSize', params.pageSize.toString());
+    if (params?.status) queryParams.set('status', params.status);
+    if (params?.search) queryParams.set('search', params.search);
+    if (params?.fromDate) queryParams.set('fromDate', params.fromDate);
+    if (params?.toDate) queryParams.set('toDate', params.toDate);
+
+    const query = queryParams.toString();
+    return this.get<PaginatedOrderResponse>(`/orders${query ? `?${query}` : ''}`);
+  }
+
+  async getOrder(id: number): Promise<Order> {
+    return this.get<Order>(`/orders/${id}`);
+  }
+
+  async updateOrderStatus(id: number, request: UpdateOrderStatusRequest): Promise<Order> {
+    return this.put<Order>(`/orders/${id}/status`, request);
+  }
+
+  async deleteOrder(id: number): Promise<void> {
+    return this.delete<void>(`/orders/${id}`);
+  }
 }
 
 export interface Product {
@@ -268,6 +321,93 @@ export interface ReorderCarouselItemDto {
 export interface ImageUploadResponse {
   imageUrl: string;
   fileName: string;
+}
+
+// Order types
+export type OrderStatus = 'Pending' | 'Processing' | 'Shipped' | 'Delivered' | 'Cancelled';
+
+export interface CreateOrderRequest {
+  items: CreateOrderItemRequest[];
+  notes?: string;
+  shippingAddress?: ShippingAddress;
+}
+
+export interface CreateOrderItemRequest {
+  productId: number;
+  quantity: number;
+  size?: string;
+  color?: string;
+}
+
+export interface ShippingAddress {
+  fullName: string;
+  addressLine1: string;
+  addressLine2?: string;
+  city: string;
+  province: string;
+  postalCode: string;
+  phone?: string;
+  email?: string;
+}
+
+export interface Order {
+  id: number;
+  orderNumber: string;
+  orderDate: string;
+  status: OrderStatus;
+  totalAmount: number;
+  notes?: string;
+  createdAt: string;
+  updatedAt?: string;
+  userId: number;
+  customerName: string;
+  customerEmail: string;
+  items: OrderItem[];
+  timeline: OrderTimeline[];
+}
+
+export interface OrderItem {
+  id: number;
+  productId: number;
+  productName: string;
+  productImageUrl?: string;
+  quantity: number;
+  unitPrice: number;
+  subtotal: number;
+  size?: string;
+  color?: string;
+}
+
+export interface OrderTimeline {
+  status: string;
+  timestamp?: string;
+  description: string;
+  completed: boolean;
+}
+
+export interface OrderSummary {
+  id: number;
+  orderNumber: string;
+  orderDate: string;
+  status: OrderStatus;
+  totalAmount: number;
+  itemCount: number;
+  customerName: string;
+  customerEmail: string;
+}
+
+export interface UpdateOrderStatusRequest {
+  status: string;
+  trackingNumber?: string;
+  adminNote?: string;
+}
+
+export interface PaginatedOrderResponse {
+  items: OrderSummary[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
 }
 
 export const apiClient = new ApiClient();

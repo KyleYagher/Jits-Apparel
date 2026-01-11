@@ -164,6 +164,7 @@ app.MapFallbackToFile("/index.html");
 // Seed database with default roles and categories
 await SeedDefaultRoles(app.Services);
 await SeedDefaultCategories(app.Services);
+await SeedTestData(app.Services);
 
 app.Run();
 
@@ -208,4 +209,212 @@ static async Task SeedDefaultCategories(IServiceProvider serviceProvider)
     }
 
     await dbContext.SaveChangesAsync();
+}
+
+// Helper method to seed test data (users, products, orders)
+static async Task SeedTestData(IServiceProvider serviceProvider)
+{
+    using var scope = serviceProvider.CreateScope();
+    var dbContext = scope.ServiceProvider.GetRequiredService<JitsDbContext>();
+    var userManager = scope.ServiceProvider.GetRequiredService<UserManager<User>>();
+
+    // Check if test data already exists
+    if (await dbContext.Orders.AnyAsync())
+    {
+        return; // Test data already seeded
+    }
+
+    // Seed test products if none exist
+    if (!await dbContext.Products.AnyAsync())
+    {
+        var categories = await dbContext.Categories.ToListAsync();
+        var signatureCategory = categories.FirstOrDefault(c => c.Name == "Signature") ?? categories.First();
+        var classicCategory = categories.FirstOrDefault(c => c.Name == "Classic") ?? categories.First();
+        var limitedCategory = categories.FirstOrDefault(c => c.Name == "Limited") ?? categories.First();
+        var cultureCategory = categories.FirstOrDefault(c => c.Name == "Culture") ?? categories.First();
+
+        var testProducts = new List<Product>
+        {
+            new Product
+            {
+                Name = "Jits Sunset Tee",
+                Price = 599.00m,
+                Description = "Premium cotton tee with vibrant sunset gradient design",
+                StockQuantity = 50,
+                ImageUrl = "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=400",
+                CategoryId = signatureCategory.Id,
+                IsActive = true,
+                IsFeatured = true,
+                CreatedAt = DateTime.UtcNow
+            },
+            new Product
+            {
+                Name = "Urban Flow Classic",
+                Price = 549.00m,
+                Description = "Classic fit urban streetwear essential",
+                StockQuantity = 75,
+                ImageUrl = "https://images.unsplash.com/photo-1583743814966-8936f5b7be1a?w=400",
+                CategoryId = classicCategory.Id,
+                IsActive = true,
+                IsFeatured = true,
+                CreatedAt = DateTime.UtcNow
+            },
+            new Product
+            {
+                Name = "Retro Wave Limited",
+                Price = 799.00m,
+                Description = "Limited edition retro wave design - only 100 made",
+                StockQuantity = 25,
+                ImageUrl = "https://images.unsplash.com/photo-1562157873-818bc0726f68?w=400",
+                CategoryId = limitedCategory.Id,
+                IsActive = true,
+                IsFeatured = true,
+                CreatedAt = DateTime.UtcNow
+            },
+            new Product
+            {
+                Name = "Street Culture Hoodie",
+                Price = 899.00m,
+                Description = "Heavyweight hoodie with street art inspired graphics",
+                StockQuantity = 40,
+                ImageUrl = "https://images.unsplash.com/photo-1556821840-3a63f95609a7?w=400",
+                CategoryId = cultureCategory.Id,
+                IsActive = true,
+                IsFeatured = false,
+                CreatedAt = DateTime.UtcNow
+            },
+            new Product
+            {
+                Name = "Minimal White Tee",
+                Price = 449.00m,
+                Description = "Clean minimal design for everyday wear",
+                StockQuantity = 100,
+                ImageUrl = "https://images.unsplash.com/photo-1618354691373-d851c5c3a990?w=400",
+                CategoryId = classicCategory.Id,
+                IsActive = true,
+                IsFeatured = false,
+                CreatedAt = DateTime.UtcNow
+            },
+            new Product
+            {
+                Name = "Neon Nights Graphic",
+                Price = 649.00m,
+                Description = "Bold neon graphics that glow under UV light",
+                StockQuantity = 35,
+                ImageUrl = "https://images.unsplash.com/photo-1503341504253-dff4815485f1?w=400",
+                CategoryId = signatureCategory.Id,
+                IsActive = true,
+                IsFeatured = false,
+                CreatedAt = DateTime.UtcNow
+            }
+        };
+
+        dbContext.Products.AddRange(testProducts);
+        await dbContext.SaveChangesAsync();
+    }
+
+    // Create test users
+    var testUsers = new List<(string Email, string FirstName, string LastName, string Password)>
+    {
+        ("john.doe@example.com", "John", "Doe", "Test123!"),
+        ("jane.smith@example.com", "Jane", "Smith", "Test123!"),
+        ("mike.johnson@example.com", "Mike", "Johnson", "Test123!"),
+        ("sarah.williams@example.com", "Sarah", "Williams", "Test123!"),
+        ("david.brown@example.com", "David", "Brown", "Test123!")
+    };
+
+    var createdUsers = new List<User>();
+
+    foreach (var (email, firstName, lastName, password) in testUsers)
+    {
+        var existingUser = await userManager.FindByEmailAsync(email);
+        if (existingUser == null)
+        {
+            var user = new User
+            {
+                UserName = email,
+                Email = email,
+                FirstName = firstName,
+                LastName = lastName,
+                EmailConfirmed = true,
+                Address = "123 Test Street",
+                City = "Cape Town",
+                StateOrProvince = "Western Cape",
+                ZipCode = "8001",
+                CreatedAt = DateTime.UtcNow
+            };
+
+            var result = await userManager.CreateAsync(user, password);
+            if (result.Succeeded)
+            {
+                await userManager.AddToRoleAsync(user, "Customer");
+                createdUsers.Add(user);
+            }
+        }
+        else
+        {
+            createdUsers.Add(existingUser);
+        }
+    }
+
+    // Get products for orders
+    var products = await dbContext.Products.Take(6).ToListAsync();
+    if (products.Count == 0) return;
+
+    // Create test orders
+    var random = new Random(42); // Fixed seed for reproducibility
+    var statuses = new[] { OrderStatus.Pending, OrderStatus.Processing, OrderStatus.Shipped, OrderStatus.Delivered, OrderStatus.Cancelled };
+    var sizes = new[] { "S", "M", "L", "XL" };
+    var colors = new[] { "Black", "White", "Navy", "Grey" };
+
+    var testOrders = new List<Order>();
+
+    // Create 10 test orders
+    for (int i = 0; i < 10; i++)
+    {
+        var user = createdUsers[random.Next(createdUsers.Count)];
+        var status = statuses[random.Next(statuses.Length)];
+        var orderDate = DateTime.UtcNow.AddDays(-random.Next(1, 30));
+
+        var order = new Order
+        {
+            UserId = user.Id,
+            OrderNumber = $"ORD-{orderDate:yyyyMMdd}-{Guid.NewGuid().ToString()[..8].ToUpper()}",
+            OrderDate = orderDate,
+            Status = status,
+            Notes = i % 3 == 0 ? "Please gift wrap this order" : null,
+            CreatedAt = orderDate,
+            UpdatedAt = status != OrderStatus.Pending ? orderDate.AddHours(random.Next(1, 48)) : null
+        };
+
+        // Add 1-3 items per order
+        var itemCount = random.Next(1, 4);
+        decimal totalAmount = 0;
+
+        for (int j = 0; j < itemCount; j++)
+        {
+            var product = products[random.Next(products.Count)];
+            var quantity = random.Next(1, 3);
+            var subtotal = product.Price * quantity;
+            totalAmount += subtotal;
+
+            order.OrderItems.Add(new OrderItem
+            {
+                ProductId = product.Id,
+                Quantity = quantity,
+                UnitPrice = product.Price,
+                Subtotal = subtotal,
+                Size = sizes[random.Next(sizes.Length)],
+                Color = colors[random.Next(colors.Length)]
+            });
+        }
+
+        order.TotalAmount = totalAmount;
+        testOrders.Add(order);
+    }
+
+    dbContext.Orders.AddRange(testOrders);
+    await dbContext.SaveChangesAsync();
+
+    Console.WriteLine($"Seeded {testOrders.Count} test orders with {testOrders.Sum(o => o.OrderItems.Count)} order items");
 }

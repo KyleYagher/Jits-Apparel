@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../context/useAuth';
 import Papa from 'papaparse';
-import { apiClient, ProductUploadDto, Product, CarouselItem, CreateCarouselItemDto, UpdateCarouselItemDto, ReorderCarouselItemDto } from '../services/api';
+import { apiClient, ProductUploadDto, Product, CarouselItem, CreateCarouselItemDto, UpdateCarouselItemDto, ReorderCarouselItemDto, OrderSummary, Order } from '../services/api';
 import { toast } from 'sonner';
 import {
   Package,
@@ -30,7 +30,6 @@ import { AddProduct, NewProductData } from '../components/AddProduct';
 import { AddCarouselItem } from '../components/AddCarouselItem';
 import { EditCarouselItem } from '../components/EditCarouselItem';
 import { SplashScreen } from '../components/SplashScreen';
-import { OrderDetails, DetailedOrder } from '../components/OrderDetails';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
@@ -53,13 +52,6 @@ const categoryData = [
   { name: 'Accessories', value: 100, color: '#06b6d4' },
 ];
 
-const recentOrders = [
-  { id: 'ORD-001', customer: 'John Doe', amount: 'R599', status: 'delivered', date: '2026-01-07' },
-  { id: 'ORD-002', customer: 'Jane Smith', amount: 'R1199', status: 'processing', date: '2026-01-07' },
-  { id: 'ORD-003', customer: 'Mike Johnson', amount: 'R799', status: 'shipped', date: '2026-01-06' },
-  { id: 'ORD-004', customer: 'Sarah Williams', amount: 'R1599', status: 'pending', date: '2026-01-06' },
-  { id: 'ORD-005', customer: 'David Brown', amount: 'R599', status: 'delivered', date: '2026-01-05' },
-];
 
 const deliveryIntegrations = [
   { name: 'Aramex', status: 'active', lastSync: '2 mins ago', orders: 45 },
@@ -218,108 +210,12 @@ export function Dashboard() {
   const [selectedProductForDelete, setSelectedProductForDelete] = useState<Product | null>(null);
   const [showAddProduct, setShowAddProduct] = useState(false);
 
-  // Order modal state
-  const [selectedOrder, setSelectedOrder] = useState<DetailedOrder | null>(null);
-
-  // Function to convert basic order to detailed order
-  const getDetailedOrder = (basicOrder: typeof recentOrders[0]): DetailedOrder => {
-    return {
-      ...basicOrder,
-      status: basicOrder.status as DetailedOrder['status'],
-      customerEmail: `${basicOrder.customer.toLowerCase().replace(' ', '.')}@example.com`,
-      customerPhone: '+27 ' + Math.floor(Math.random() * 900000000 + 100000000),
-      customerType: Math.random() > 0.5 ? 'Registered' : 'Guest',
-      paymentStatus: basicOrder.status === 'pending' ? 'Pending' : 'Paid',
-      paymentMethod: 'Credit Card (•••• 4242)',
-      shippingAddress: {
-        fullName: basicOrder.customer,
-        addressLine1: '123 Main Street',
-        addressLine2: 'Apartment 4B',
-        city: 'Cape Town',
-        province: 'Western Cape',
-        postalCode: '8001',
-        country: 'South Africa',
-      },
-      shippingMethod: 'Standard Delivery (3-5 business days)',
-      trackingNumber: basicOrder.status === 'shipped' || basicOrder.status === 'delivered' ? `TCG${Math.floor(Math.random() * 1000000000)}` : undefined,
-      deliveryNotes: 'Please leave package at the front door if not home',
-      items: [
-        {
-          id: '1',
-          productName: 'Jits Sunset Tee',
-          productImage: 'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=200',
-          sku: 'JST-001-BLK-L',
-          variant: 'Size: L, Color: Black',
-          quantity: 1,
-          unitPrice: 599,
-          lineTotal: 599,
-        },
-        ...(parseFloat(basicOrder.amount.replace('R', '')) > 600 ? [{
-          id: '2',
-          productName: 'Classic Plain White',
-          productImage: 'https://images.unsplash.com/photo-1583743814966-8936f5b7be1a?w=200',
-          sku: 'CPW-001-WHT-M',
-          variant: 'Size: M, Color: White',
-          quantity: 1,
-          unitPrice: 549,
-          lineTotal: 549,
-        }] : []),
-      ],
-      subtotal: parseFloat(basicOrder.amount.replace('R', '')) - 150,
-      discount: 0,
-      tax: Math.round((parseFloat(basicOrder.amount.replace('R', '')) - 150) * 0.15),
-      shipping: 65,
-      total: parseFloat(basicOrder.amount.replace('R', '')),
-      timeline: [
-        {
-          status: 'Order Placed',
-          timestamp: `${basicOrder.date} 10:14 AM`,
-          description: 'Your order has been received and is being processed',
-          completed: true,
-        },
-        {
-          status: 'Payment Confirmed',
-          timestamp: `${basicOrder.date} 10:15 AM`,
-          description: 'Payment has been successfully processed',
-          completed: basicOrder.status !== 'pending',
-        },
-        {
-          status: 'Processing',
-          timestamp: `${basicOrder.date} 11:02 AM`,
-          description: 'Your order is being prepared for shipment',
-          completed: ['processing', 'shipped', 'delivered'].includes(basicOrder.status),
-        },
-        {
-          status: 'Shipped',
-          timestamp: new Date(new Date(basicOrder.date).getTime() + 86400000).toISOString().split('T')[0] + ' 09:20 AM',
-          description: 'Your order has been dispatched',
-          completed: ['shipped', 'delivered'].includes(basicOrder.status),
-        },
-        {
-          status: 'Delivered',
-          timestamp: 'Pending',
-          description: 'Your order will be delivered soon',
-          completed: basicOrder.status === 'delivered',
-        },
-      ],
-      notes: [
-        {
-          id: '1',
-          text: 'Customer requested gift wrapping',
-          author: 'Admin',
-          timestamp: `${basicOrder.date} 10:20 AM`,
-          internal: true,
-        },
-        {
-          id: '2',
-          text: 'Please deliver before 5 PM',
-          author: basicOrder.customer,
-          timestamp: `${basicOrder.date} 10:14 AM`,
-          internal: false,
-        },
-      ],
-    };
-  };
+  // Order state
+  const [orders, setOrders] = useState<OrderSummary[]>([]);
+  const [loadingOrders, setLoadingOrders] = useState(false);
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [orderFilters, setOrderFilters] = useState({ status: '', search: '' });
+  const [ordersPagination, setOrdersPagination] = useState({ totalCount: 0, totalPages: 0, page: 1 });
 
   // Carousel modal states
   const [selectedCarouselItem, setSelectedCarouselItem] = useState<CarouselItem | null>(null);
@@ -538,6 +434,60 @@ export function Dashboard() {
     }
   }, [activeTab]);
 
+  // Order handlers
+  const fetchOrders = async () => {
+    try {
+      setLoadingOrders(true);
+      const response = await apiClient.getAllOrders({
+        page: ordersPagination.page,
+        status: orderFilters.status || undefined,
+        search: orderFilters.search || undefined,
+      });
+      setOrders(response.items);
+      setOrdersPagination({
+        totalCount: response.totalCount,
+        totalPages: response.totalPages,
+        page: response.page,
+      });
+    } catch (error) {
+      console.error('Error fetching orders:', error);
+      toast.error(`Failed to load orders: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setLoadingOrders(false);
+    }
+  };
+
+  const viewOrderDetails = async (orderId: number) => {
+    try {
+      const order = await apiClient.getOrder(orderId);
+      setSelectedOrder(order);
+    } catch (error) {
+      toast.error(`Failed to load order details: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
+  const handleOrderStatusUpdate = async (orderId: number, newStatus: string) => {
+    try {
+      toast.loading('Updating order status...', { id: 'order-status' });
+      await apiClient.updateOrderStatus(orderId, { status: newStatus });
+      toast.success('Order status updated!', { id: 'order-status' });
+      fetchOrders();
+      if (selectedOrder && selectedOrder.id === orderId) {
+        const updatedOrder = await apiClient.getOrder(orderId);
+        setSelectedOrder(updatedOrder);
+      }
+    } catch (error) {
+      toast.error(`Failed to update status: ${error instanceof Error ? error.message : 'Unknown error'}`, { id: 'order-status' });
+    }
+  };
+
+  // Fetch orders when orders or overview tab is active
+  useEffect(() => {
+    if (activeTab === 'orders' || activeTab === 'overview') {
+      fetchOrders();
+    }
+  }, [activeTab, orderFilters.status, orderFilters.search, ordersPagination.page]);
+
   const handleProductAdd = async (newProductData: NewProductData) => {
     try {
       toast.loading('Adding product...', { id: 'add-product' });
@@ -720,34 +670,51 @@ export function Dashboard() {
 
             {/* Recent Orders */}
             <div className="bg-card border rounded-lg p-6">
-              <h3 className="text-lg font-semibold mb-4">Recent Orders</h3>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold">Recent Orders</h3>
+                <button
+                  className="text-sm text-pink-600 dark:text-pink-400 hover:underline"
+                  onClick={() => setActiveTab('orders')}
+                >
+                  View All
+                </button>
+              </div>
               <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b">
-                      <th className="text-left py-3 px-4">Order ID</th>
-                      <th className="text-left py-3 px-4">Customer</th>
-                      <th className="text-left py-3 px-4">Amount</th>
-                      <th className="text-left py-3 px-4">Status</th>
-                      <th className="text-left py-3 px-4">Date</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {recentOrders.slice(0, 5).map((order) => (
-                      <tr key={order.id} className="border-b hover:bg-muted/50 transition-colors">
-                        <td className="py-3 px-4 font-mono text-sm">{order.id}</td>
-                        <td className="py-3 px-4">{order.customer}</td>
-                        <td className="py-3 px-4 font-semibold">{order.amount}</td>
-                        <td className="py-3 px-4">
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${getOrderStatusColor(order.status)}`}>
-                            {order.status}
-                          </span>
-                        </td>
-                        <td className="py-3 px-4 text-sm text-muted-foreground">{order.date}</td>
+                {orders.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <ShoppingCart className="h-8 w-8 mx-auto mb-2" />
+                    <p>No orders yet</p>
+                  </div>
+                ) : (
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b">
+                        <th className="text-left py-3 px-4">Order ID</th>
+                        <th className="text-left py-3 px-4">Customer</th>
+                        <th className="text-left py-3 px-4">Amount</th>
+                        <th className="text-left py-3 px-4">Status</th>
+                        <th className="text-left py-3 px-4">Date</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {orders.slice(0, 5).map((order) => (
+                        <tr key={order.id} className="border-b hover:bg-muted/50 transition-colors">
+                          <td className="py-3 px-4 font-mono text-sm">{order.orderNumber}</td>
+                          <td className="py-3 px-4">{order.customerName}</td>
+                          <td className="py-3 px-4 font-semibold">R{order.totalAmount.toFixed(2)}</td>
+                          <td className="py-3 px-4">
+                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${getOrderStatusColor(order.status.toLowerCase())}`}>
+                              {order.status}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-sm text-muted-foreground">
+                            {new Date(order.orderDate).toLocaleDateString('en-ZA')}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
               </div>
             </div>
           </div>
@@ -843,6 +810,7 @@ export function Dashboard() {
                     onChange={(e) => setSearchTerm(e.target.value)}
                   />
                   <button
+                    type='button'
                     className="px-4 py-2 rounded-md text-white text-sm transition-all hover:opacity-90"
                     style={{
                       background: 'linear-gradient(90deg, var(--jits-pink) 0%, var(--jits-orange) 100%)'
@@ -1046,63 +1014,117 @@ export function Dashboard() {
           <div className="space-y-6">
             <div className="bg-card border rounded-lg p-6">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold">All Orders</h3>
+                <div>
+                  <h3 className="text-lg font-semibold">All Orders</h3>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {loadingOrders ? 'Loading...' : `${orders.length} of ${ordersPagination.totalCount} orders`}
+                  </p>
+                </div>
                 <div className="flex gap-2">
-                  <select 
-                    className="px-3 py-1 border rounded-md text-sm"
-                    title='Status selection'>
-                    <option>All Statuses</option>
-                    <option>Pending</option>
-                    <option>Processing</option>
-                    <option>Shipped</option>
-                    <option>Delivered</option>
+                  <select
+                    className="px-3 py-2 border rounded-md text-sm bg-background"
+                    title='Status selection'
+                    value={orderFilters.status}
+                    onChange={(e) => setOrderFilters(prev => ({ ...prev, status: e.target.value }))}
+                  >
+                    <option value="">All Statuses</option>
+                    <option value="Pending">Pending</option>
+                    <option value="Processing">Processing</option>
+                    <option value="Shipped">Shipped</option>
+                    <option value="Delivered">Delivered</option>
+                    <option value="Cancelled">Cancelled</option>
                   </select>
                   <input
                     type="text"
                     placeholder="Search orders..."
-                    className="px-3 py-1 border rounded-md text-sm"
+                    className="px-3 py-2 border rounded-md text-sm bg-background"
+                    value={orderFilters.search}
+                    onChange={(e) => setOrderFilters(prev => ({ ...prev, search: e.target.value }))}
                   />
                 </div>
               </div>
 
               <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b">
-                      <th className="text-left py-3 px-4">Order ID</th>
-                      <th className="text-left py-3 px-4">Customer</th>
-                      <th className="text-left py-3 px-4">Amount</th>
-                      <th className="text-left py-3 px-4">Status</th>
-                      <th className="text-left py-3 px-4">Date</th>
-                      <th className="text-left py-3 px-4">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {recentOrders.map((order) => (
-                      <tr key={order.id} className="border-b hover:bg-muted/50 transition-colors">
-                        <td className="py-3 px-4 font-mono text-sm">{order.id}</td>
-                        <td className="py-3 px-4">{order.customer}</td>
-                        <td className="py-3 px-4 font-semibold">{order.amount}</td>
-                        <td className="py-3 px-4">
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${getOrderStatusColor(order.status)}`}>
-                            {order.status}
-                          </span>
-                        </td>
-                        <td className="py-3 px-4 text-sm text-muted-foreground">{order.date}</td>
-                        <td className="py-3 px-4">
-                          <button 
-                            className="text-sm text-pink-600 dark:text-pink-400 hover:underline"
-                            onClick={() => {
-                              setSelectedOrder(getDetailedOrder(order));
-                            }}
+                {loadingOrders ? (
+                  <SplashScreen mode="inline" show={true} message="Loading orders..." size="sm" minHeight="200px" />
+                ) : orders.length === 0 ? (
+                  <div className="text-center py-12">
+                    <ShoppingCart className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                    <p className="text-muted-foreground mb-2">No orders found</p>
+                    <p className="text-sm text-muted-foreground">Orders will appear here when customers place them</p>
+                  </div>
+                ) : (
+                  <>
+                    <table className="w-full">
+                      <thead>
+                        <tr className="border-b">
+                          <th className="text-left py-3 px-4">Order ID</th>
+                          <th className="text-left py-3 px-4">Customer</th>
+                          <th className="text-left py-3 px-4">Amount</th>
+                          <th className="text-left py-3 px-4">Items</th>
+                          <th className="text-left py-3 px-4">Status</th>
+                          <th className="text-left py-3 px-4">Date</th>
+                          <th className="text-left py-3 px-4">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {orders.map((order) => (
+                          <tr key={order.id} className="border-b hover:bg-muted/50 transition-colors">
+                            <td className="py-3 px-4 font-mono text-sm">{order.orderNumber}</td>
+                            <td className="py-3 px-4">
+                              <div>
+                                <p className="font-medium">{order.customerName}</p>
+                                <p className="text-xs text-muted-foreground">{order.customerEmail}</p>
+                              </div>
+                            </td>
+                            <td className="py-3 px-4 font-semibold">R{order.totalAmount.toFixed(2)}</td>
+                            <td className="py-3 px-4 text-sm text-muted-foreground">{order.itemCount} items</td>
+                            <td className="py-3 px-4">
+                              <span className={`px-2 py-1 rounded-full text-xs font-medium ${getOrderStatusColor(order.status.toLowerCase())}`}>
+                                {order.status}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 text-sm text-muted-foreground">
+                              {new Date(order.orderDate).toLocaleDateString('en-ZA')}
+                            </td>
+                            <td className="py-3 px-4">
+                              <button
+                                className="text-sm text-pink-600 dark:text-pink-400 hover:underline"
+                                onClick={() => viewOrderDetails(order.id)}
+                              >
+                                View Details
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {/* Pagination */}
+                    {ordersPagination.totalPages > 1 && (
+                      <div className="flex items-center justify-between mt-4 pt-4 border-t">
+                        <p className="text-sm text-muted-foreground">
+                          Page {ordersPagination.page} of {ordersPagination.totalPages}
+                        </p>
+                        <div className="flex gap-2">
+                          <button
+                            className="px-3 py-1 border rounded-md text-sm disabled:opacity-50"
+                            disabled={ordersPagination.page <= 1}
+                            onClick={() => setOrdersPagination(prev => ({ ...prev, page: prev.page - 1 }))}
                           >
-                            View Details
+                            Previous
                           </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                          <button
+                            className="px-3 py-1 border rounded-md text-sm disabled:opacity-50"
+                            disabled={ordersPagination.page >= ordersPagination.totalPages}
+                            onClick={() => setOrdersPagination(prev => ({ ...prev, page: prev.page + 1 }))}
+                          >
+                            Next
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -1284,11 +1306,153 @@ export function Dashboard() {
           onSave={handleCarouselItemUpdate}
         />
       )}
+      {/* Order Details Modal */}
       {selectedOrder && (
-        <OrderDetails
-          order={selectedOrder}
-          onClose={() => setSelectedOrder(null)}
-        />
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-card rounded-lg border max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-mono text-sm text-muted-foreground">
+                    {selectedOrder.orderNumber}
+                  </p>
+                  <h2 className="text-xl font-semibold">Order Details</h2>
+                </div>
+                <button
+                  title='Set Selected order'
+                  onClick={() => setSelectedOrder(null)}
+                  className="p-2 hover:bg-muted rounded-lg transition-colors"
+                >
+                  <XCircle className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* Customer Info */}
+              <div>
+                <h3 className="font-medium mb-2">Customer</h3>
+                <p className="font-medium">{selectedOrder.customerName}</p>
+                <p className="text-sm text-muted-foreground">{selectedOrder.customerEmail}</p>
+              </div>
+
+              {/* Status with Update */}
+              <div>
+                <h3 className="font-medium mb-2">Status</h3>
+                <div className="flex items-center gap-4">
+                  <span className={`px-3 py-1 rounded-full text-sm font-medium ${getOrderStatusColor(selectedOrder.status.toLowerCase())}`}>
+                    {selectedOrder.status}
+                  </span>
+                  <select
+                    title='Update status'
+                    className="px-3 py-1 border rounded-md text-sm bg-background"
+                    value={selectedOrder.status}
+                    onChange={(e) => handleOrderStatusUpdate(selectedOrder.id, e.target.value)}
+                  >
+                    <option value="Pending">Pending</option>
+                    <option value="Processing">Processing</option>
+                    <option value="Shipped">Shipped</option>
+                    <option value="Delivered">Delivered</option>
+                    <option value="Cancelled">Cancelled</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Timeline */}
+              <div>
+                <h3 className="font-medium mb-4">Order Timeline</h3>
+                <div className="space-y-3">
+                  {selectedOrder.timeline.map((step, index) => (
+                    <div key={index} className="flex items-center gap-3">
+                      <div className={`w-3 h-3 rounded-full ${step.completed ? 'bg-green-500' : 'bg-muted'}`} />
+                      <div className="flex-1">
+                        <p className={step.completed ? 'font-medium' : 'text-muted-foreground'}>
+                          {step.status}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {step.completed && step.timestamp
+                            ? new Date(step.timestamp).toLocaleString('en-ZA')
+                            : step.description}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Order Items */}
+              <div>
+                <h3 className="font-medium mb-4">Items</h3>
+                <div className="space-y-3">
+                  {selectedOrder.items.map((item) => (
+                    <div key={item.id} className="flex gap-3">
+                      <div className="w-16 h-16 rounded-lg overflow-hidden bg-muted flex-shrink-0">
+                        {item.productImageUrl ? (
+                          <img
+                            src={item.productImageUrl}
+                            alt={item.productName}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center">
+                            <Package className="w-6 h-6 text-muted-foreground" />
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-medium">{item.productName}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {item.size && `Size: ${item.size}`}
+                          {item.size && item.color && ' • '}
+                          {item.color && `Color: ${item.color}`}
+                        </p>
+                        <div className="flex justify-between mt-1">
+                          <span className="text-sm text-muted-foreground">
+                            Qty: {item.quantity} × R{item.unitPrice.toFixed(2)}
+                          </span>
+                          <span className="font-medium" style={{ color: 'var(--jits-pink)' }}>
+                            R{item.subtotal.toFixed(2)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Order Total */}
+              <div className="border-t pt-4">
+                <div className="flex justify-between font-medium text-lg">
+                  <span>Total</span>
+                  <span style={{ color: 'var(--jits-pink)' }}>
+                    R{selectedOrder.totalAmount.toFixed(2)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Notes */}
+              {selectedOrder.notes && (
+                <div className="bg-muted/50 rounded-lg p-4">
+                  <h4 className="font-medium mb-2">Notes</h4>
+                  <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+                    {selectedOrder.notes}
+                  </p>
+                </div>
+              )}
+
+              {/* Order Date */}
+              <div className="text-sm text-muted-foreground">
+                Ordered on {new Date(selectedOrder.orderDate).toLocaleDateString('en-ZA', {
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit'
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
