@@ -48,6 +48,7 @@ export default defineConfig({
             '@': fileURLToPath(new URL('./src', import.meta.url))
         }
     },
+    assetsInclude: ['**/*.ttf', '**/*.otf', '**/*.woff', '**/*.woff2'],
     server: {
         proxy: {
             '^/api': {
@@ -56,7 +57,7 @@ export default defineConfig({
                 changeOrigin: true
             }
         },
-        port: parseInt(env.DEV_SERVER_PORT || '62169'),
+        port: parseInt(env.DEV_SERVER_PORT || '5173'),
         https: {
             key: fs.readFileSync(keyFilePath),
             cert: fs.readFileSync(certFilePath),

@@ -120,7 +120,7 @@ export function Navigation({ onNavigate, currentPage, onCartClick }: NavigationP
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => {
                       logout();
-                      onNavigate('home');
+                      onNavigate('/');
                   }}>
                     <LogOut className="mr-2 h-4 w-4" />
                     Sign Out

@@ -34,6 +34,7 @@ import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Cart
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { OrderDetails } from '../components/OrderDetails';
 
 // Mock data
 const salesData = [
@@ -1260,6 +1261,7 @@ export function Dashboard() {
           </div>
         )}
       </div>
+
       {/* Product Modals */}
       {showAddProduct && (
         <AddProduct
@@ -1308,151 +1310,11 @@ export function Dashboard() {
       )}
       {/* Order Details Modal */}
       {selectedOrder && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-card rounded-lg border max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-mono text-sm text-muted-foreground">
-                    {selectedOrder.orderNumber}
-                  </p>
-                  <h2 className="text-xl font-semibold">Order Details</h2>
-                </div>
-                <button
-                  title='Set Selected order'
-                  onClick={() => setSelectedOrder(null)}
-                  className="p-2 hover:bg-muted rounded-lg transition-colors"
-                >
-                  <XCircle className="w-5 h-5" />
-                </button>
-              </div>
-            </div>
-
-            <div className="p-6 space-y-6">
-              {/* Customer Info */}
-              <div>
-                <h3 className="font-medium mb-2">Customer</h3>
-                <p className="font-medium">{selectedOrder.customerName}</p>
-                <p className="text-sm text-muted-foreground">{selectedOrder.customerEmail}</p>
-              </div>
-
-              {/* Status with Update */}
-              <div>
-                <h3 className="font-medium mb-2">Status</h3>
-                <div className="flex items-center gap-4">
-                  <span className={`px-3 py-1 rounded-full text-sm font-medium ${getOrderStatusColor(selectedOrder.status.toLowerCase())}`}>
-                    {selectedOrder.status}
-                  </span>
-                  <select
-                    title='Update status'
-                    className="px-3 py-1 border rounded-md text-sm bg-background"
-                    value={selectedOrder.status}
-                    onChange={(e) => handleOrderStatusUpdate(selectedOrder.id, e.target.value)}
-                  >
-                    <option value="Pending">Pending</option>
-                    <option value="Processing">Processing</option>
-                    <option value="Shipped">Shipped</option>
-                    <option value="Delivered">Delivered</option>
-                    <option value="Cancelled">Cancelled</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Timeline */}
-              <div>
-                <h3 className="font-medium mb-4">Order Timeline</h3>
-                <div className="space-y-3">
-                  {selectedOrder.timeline.map((step, index) => (
-                    <div key={index} className="flex items-center gap-3">
-                      <div className={`w-3 h-3 rounded-full ${step.completed ? 'bg-green-500' : 'bg-muted'}`} />
-                      <div className="flex-1">
-                        <p className={step.completed ? 'font-medium' : 'text-muted-foreground'}>
-                          {step.status}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {step.completed && step.timestamp
-                            ? new Date(step.timestamp).toLocaleString('en-ZA')
-                            : step.description}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Order Items */}
-              <div>
-                <h3 className="font-medium mb-4">Items</h3>
-                <div className="space-y-3">
-                  {selectedOrder.items.map((item) => (
-                    <div key={item.id} className="flex gap-3">
-                      <div className="w-16 h-16 rounded-lg overflow-hidden bg-muted flex-shrink-0">
-                        {item.productImageUrl ? (
-                          <img
-                            src={item.productImageUrl}
-                            alt={item.productName}
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center">
-                            <Package className="w-6 h-6 text-muted-foreground" />
-                          </div>
-                        )}
-                      </div>
-                      <div className="flex-1">
-                        <p className="font-medium">{item.productName}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {item.size && `Size: ${item.size}`}
-                          {item.size && item.color && ' • '}
-                          {item.color && `Color: ${item.color}`}
-                        </p>
-                        <div className="flex justify-between mt-1">
-                          <span className="text-sm text-muted-foreground">
-                            Qty: {item.quantity} × R{item.unitPrice.toFixed(2)}
-                          </span>
-                          <span className="font-medium" style={{ color: 'var(--jits-pink)' }}>
-                            R{item.subtotal.toFixed(2)}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Order Total */}
-              <div className="border-t pt-4">
-                <div className="flex justify-between font-medium text-lg">
-                  <span>Total</span>
-                  <span style={{ color: 'var(--jits-pink)' }}>
-                    R{selectedOrder.totalAmount.toFixed(2)}
-                  </span>
-                </div>
-              </div>
-
-              {/* Notes */}
-              {selectedOrder.notes && (
-                <div className="bg-muted/50 rounded-lg p-4">
-                  <h4 className="font-medium mb-2">Notes</h4>
-                  <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-                    {selectedOrder.notes}
-                  </p>
-                </div>
-              )}
-
-              {/* Order Date */}
-              <div className="text-sm text-muted-foreground">
-                Ordered on {new Date(selectedOrder.orderDate).toLocaleDateString('en-ZA', {
-                  year: 'numeric',
-                  month: 'long',
-                  day: 'numeric',
-                  hour: '2-digit',
-                  minute: '2-digit'
-                })}
-              </div>
-            </div>
-          </div>
-        </div>
+        <OrderDetails
+          order={selectedOrder}
+          onClose={() => setSelectedOrder(null)}
+          onStatusUpdate={handleOrderStatusUpdate}
+        />
       )}
     </div>
   );

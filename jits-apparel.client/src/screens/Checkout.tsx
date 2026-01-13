@@ -56,6 +56,7 @@ export default function CheckoutScreen() {
           city: formData.city,
           province: formData.province,
           postalCode: formData.postalCode,
+          country: 'South Africa',
           phone: formData.phone,
           email: formData.email
         }

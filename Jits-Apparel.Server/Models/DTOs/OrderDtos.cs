@@ -26,6 +26,7 @@ public class ShippingAddressDto
     public string City { get; set; } = string.Empty;
     public string Province { get; set; } = string.Empty;
     public string PostalCode { get; set; } = string.Empty;
+    public string Country { get; set; } = "South Africa";
     public string? Phone { get; set; }
     public string? Email { get; set; }
 }
@@ -42,10 +43,21 @@ public class OrderDto
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
 
-    // Customer info
+    // Customer info (snapshot from order creation)
     public int UserId { get; set; }
     public string CustomerName { get; set; } = string.Empty;
     public string CustomerEmail { get; set; } = string.Empty;
+    public string? CustomerPhone { get; set; }
+
+    // Shipping info
+    public string? TrackingNumber { get; set; }
+    public string? ShippingMethod  { get; set; }
+    public string? EstimatedDelivery { get; set; }
+    public ShippingAddressDto? ShippingAddress { get; set; }
+
+    // Payment info
+    public string? PaymentMethod { get; set; }
+    public string PaymentStatus { get; set; } = "Pending";
 
     // Items
     public List<OrderItemDto> Items { get; set; } = new();
@@ -96,6 +108,14 @@ public class UpdateOrderStatusRequest
     public string Status { get; set; } = string.Empty;
     public string? TrackingNumber { get; set; }
     public string? AdminNote { get; set; }
+}
+
+// Request for processing a refund (admin)
+public class RefundRequest
+{
+    public decimal? Amount { get; set; } // null = full refund
+    public string? Reason { get; set; }
+    public bool RestoreStock { get; set; } = false;
 }
 
 // Paginated response wrapper

@@ -7,6 +7,7 @@ using Jits.API.Data;
 using Jits.API.Models.Configuration;
 using Jits.API.Models.Entities;
 using Jits.API.Services;
+using Jits_Apparel.Server.Models.Enums;
 
 #if DEBUG
 // Enable PII logging ONLY in debug builds
@@ -126,7 +127,7 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
     {
-        policy.WithOrigins("https://localhost:62169", "https://localhost:62170")
+        policy.WithOrigins("https://localhost:5173", "https://localhost:5174")
               .AllowAnyHeader()
               .AllowAnyMethod()
               .AllowCredentials();
@@ -364,6 +365,8 @@ static async Task SeedTestData(IServiceProvider serviceProvider)
     // Create test orders
     var random = new Random(42); // Fixed seed for reproducibility
     var statuses = new[] { OrderStatus.Pending, OrderStatus.Processing, OrderStatus.Shipped, OrderStatus.Delivered, OrderStatus.Cancelled };
+    var shippingMethods = new[] { ShippingMethod.Standard, ShippingMethod.Express, ShippingMethod.Overnight };
+    var paymentMethods = new[] { "Credit Card", "Debit Card", "PayPal", "EFT" };
     var sizes = new[] { "S", "M", "L", "XL" };
     var colors = new[] { "Black", "White", "Navy", "Grey" };
 
@@ -375,6 +378,31 @@ static async Task SeedTestData(IServiceProvider serviceProvider)
         var user = createdUsers[random.Next(createdUsers.Count)];
         var status = statuses[random.Next(statuses.Length)];
         var orderDate = DateTime.UtcNow.AddDays(-random.Next(1, 30));
+        var shippingMethod = shippingMethods[random.Next(shippingMethods.Length)];
+
+        // Determine payment status based on order status
+        var paymentStatus = status switch
+        {
+            OrderStatus.Cancelled => "Refunded",
+            OrderStatus.Pending => random.Next(2) == 0 ? "Pending" : "Paid",
+            _ => "Paid"
+        };
+
+        // Generate tracking number for shipped/delivered orders
+        string? trackingNumber = status is OrderStatus.Shipped or OrderStatus.Delivered
+            ? $"TRK{random.Next(100000000, 999999999)}"
+            : null;
+
+        // Calculate estimated delivery based on shipping method and order date
+        var deliveryDays = shippingMethod switch
+        {
+            ShippingMethod.Overnight => 1,
+            ShippingMethod.Express => 3,
+            _ => 7
+        };
+        var estimatedDelivery = status == OrderStatus.Delivered
+            ? orderDate.AddDays(deliveryDays).ToString("yyyy-MM-dd")
+            : orderDate.AddDays(deliveryDays + random.Next(0, 3)).ToString("yyyy-MM-dd");
 
         var order = new Order
         {
@@ -384,7 +412,28 @@ static async Task SeedTestData(IServiceProvider serviceProvider)
             Status = status,
             Notes = i % 3 == 0 ? "Please gift wrap this order" : null,
             CreatedAt = orderDate,
-            UpdatedAt = status != OrderStatus.Pending ? orderDate.AddHours(random.Next(1, 48)) : null
+            UpdatedAt = status != OrderStatus.Pending ? orderDate.AddHours(random.Next(1, 48)) : null,
+
+            // Customer snapshot (captured at order creation)
+            CustomerName = $"{user.FirstName} {user.LastName}",
+            CustomerEmail = user.Email ?? "",
+            CustomerPhone = user.PhoneNumber,
+
+            // Shipping information
+            ShippingMethod = shippingMethod,
+            TrackingNumber = trackingNumber,
+            EstimatedDelivery = estimatedDelivery,
+            ShippingFullName = $"{user.FirstName} {user.LastName}",
+            ShippingAddressLine1 = user.Address ?? "123 Test Street",
+            ShippingAddressLine2 = i % 4 == 0 ? "Apt 4B" : null,
+            ShippingCity = user.City ?? "Cape Town",
+            ShippingProvince = user.StateOrProvince ?? "Western Cape",
+            ShippingPostalCode = user.ZipCode ?? "8001",
+            ShippingCountry = "South Africa",
+
+            // Payment information
+            PaymentMethod = paymentMethods[random.Next(paymentMethods.Length)],
+            PaymentStatus = paymentStatus
         };
 
         // Add 1-3 items per order

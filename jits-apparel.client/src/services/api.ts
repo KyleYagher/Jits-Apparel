@@ -226,6 +226,19 @@ export class ApiClient {
   async deleteOrder(id: number): Promise<void> {
     return this.delete<void>(`/orders/${id}`);
   }
+
+  // Order action endpoints
+  async resendOrderConfirmation(id: number): Promise<{ message: string }> {
+    return this.post<{ message: string }>(`/orders/${id}/resend-confirmation`);
+  }
+
+  async processRefund(id: number, request?: RefundRequest): Promise<Order> {
+    return this.post<Order>(`/orders/${id}/refund`, request);
+  }
+
+  async getOrderInvoice(id: number): Promise<InvoiceData> {
+    return this.get<InvoiceData>(`/orders/${id}/invoice`);
+  }
 }
 
 export interface Product {
@@ -346,6 +359,7 @@ export interface ShippingAddress {
   city: string;
   province: string;
   postalCode: string;
+  country: string;
   phone?: string;
   email?: string;
 }
@@ -362,6 +376,15 @@ export interface Order {
   userId: number;
   customerName: string;
   customerEmail: string;
+  customerPhone?: string;
+  // Shipping info
+  shippingMethod?: string;
+  trackingNumber?: string;
+  estimatedDelivery?: string;
+  shippingAddress?: ShippingAddress;
+  // Payment info
+  paymentMethod?: string;
+  paymentStatus: string;
   items: OrderItem[];
   timeline: OrderTimeline[];
 }
@@ -400,6 +423,44 @@ export interface UpdateOrderStatusRequest {
   status: string;
   trackingNumber?: string;
   adminNote?: string;
+}
+
+export interface RefundRequest {
+  amount?: number; // null/undefined = full refund
+  reason?: string;
+  restoreStock?: boolean;
+}
+
+export interface InvoiceData {
+  invoiceNumber: string;
+  orderNumber: string;
+  orderDate: string;
+  customerName: string;
+  customerEmail: string;
+  customerPhone?: string;
+  shippingAddress?: {
+    fullName: string;
+    addressLine1: string;
+    addressLine2?: string;
+    city: string;
+    province: string;
+    postalCode: string;
+    country: string;
+  };
+  items: {
+    productName: string;
+    quantity: number;
+    unitPrice: number;
+    subtotal: number;
+    size?: string;
+    color?: string;
+  }[];
+  subtotal: number;
+  shipping: number;
+  tax: number;
+  total: number;
+  paymentMethod?: string;
+  paymentStatus: string;
 }
 
 export interface PaginatedOrderResponse {

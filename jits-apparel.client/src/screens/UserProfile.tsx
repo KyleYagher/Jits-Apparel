@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/useAuth';
 import { useCart } from '../../context/useCart';
@@ -9,8 +9,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../co
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { Separator } from '../components/ui/separator';
 import { Badge } from '../components/ui/badge';
-import { User, ShoppingBag, Settings, Mail, Edit2, Check, X } from 'lucide-react';
+import { CustomerOrderDetails } from '../components/CustomerOrderDetails';
+import { User, ShoppingBag, Settings, Mail, Edit2, Check, X, Eye, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { apiClient, OrderSummary, Order } from '../services/api';
 
 export function UserProfile() {
   const navigate = useNavigate();
@@ -18,6 +20,43 @@ export function UserProfile() {
   const { cart } = useCart();
   const [isEditing, setIsEditing] = useState(false);
   const [editedName, setEditedName] = useState(user?.name || '');
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [orderHistory, setOrderHistory] = useState<OrderSummary[]>([]);
+  const [isLoadingOrders, setIsLoadingOrders] = useState(true);
+  const [isLoadingOrderDetails, setIsLoadingOrderDetails] = useState(false);
+
+  // Fetch user's orders on mount
+  useEffect(() => {
+    if (user) {
+      fetchOrders();
+    }
+  }, [user]);
+
+  const fetchOrders = async () => {
+    try {
+      setIsLoadingOrders(true);
+      const orders = await apiClient.getMyOrders();
+      setOrderHistory(orders);
+    } catch (error) {
+      console.error('Failed to fetch orders:', error);
+      toast.error('Failed to load orders');
+    } finally {
+      setIsLoadingOrders(false);
+    }
+  };
+
+  const handleViewOrder = async (orderId: number) => {
+    try {
+      setIsLoadingOrderDetails(true);
+      const order = await apiClient.getMyOrder(orderId);
+      setSelectedOrder(order);
+    } catch (error) {
+      console.error('Failed to fetch order details:', error);
+      toast.error('Failed to load order details');
+    } finally {
+      setIsLoadingOrderDetails(false);
+    }
+  };
 
   if (!user) {
     // Redirect to login if not authenticated
@@ -35,25 +74,6 @@ export function UserProfile() {
     setEditedName(user.name);
     setIsEditing(false);
   };
-
-
-  // Mock order history
-  const orderHistory = [
-    {
-      id: 'ORD-001',
-      date: '2026-01-01',
-      total: 599.00,
-      status: 'Delivered',
-      items: 2
-    },
-    {
-      id: 'ORD-002',
-      date: '2025-12-15',
-      total: 799.00,
-      status: 'In Transit',
-      items: 3
-    }
-  ];
 
   return (
     <div className="min-h-screen bg-background py-12 px-4">
@@ -193,32 +213,77 @@ export function UserProfile() {
                 <CardDescription>Track your past and current orders</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  {orderHistory.map((order) => (
-                    <div key={order.id} className="border rounded-lg p-4 hover:bg-muted/50 transition-colors">
-                      <div className="flex items-center justify-between mb-2">
-                        <div>
-                          <p className="font-medium">{order.id}</p>
-                          <p className="text-sm text-muted-foreground">{order.date}</p>
+                {isLoadingOrders ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                    <span className="ml-2 text-muted-foreground">Loading orders...</span>
+                  </div>
+                ) : orderHistory.length === 0 ? (
+                  <div className="text-center py-8">
+                    <ShoppingBag className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+                    <p className="text-muted-foreground">No orders yet</p>
+                    <Button
+                      variant="outline"
+                      className="mt-4"
+                      onClick={() => navigate('/shop')}
+                    >
+                      Start Shopping
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {orderHistory.map((order) => (
+                      <div key={order.id} className="border rounded-lg p-4 hover:bg-muted/50 transition-colors">
+                        <div className="flex items-center justify-between mb-2">
+                          <div>
+                            <p className="font-medium">{order.orderNumber}</p>
+                            <p className="text-sm text-muted-foreground">
+                              {new Date(order.orderDate).toLocaleDateString('en-ZA', {
+                                year: 'numeric',
+                                month: 'long',
+                                day: 'numeric'
+                              })}
+                            </p>
+                          </div>
+                          <Badge
+                            className="capitalize"
+                            variant={order.status.toLowerCase() === 'delivered' ? 'default' : 'secondary'}
+                            style={order.status.toLowerCase() === 'delivered' ? {
+                              backgroundColor: 'var(--jits-cyan)',
+                              color: 'white'
+                            } : {}}
+                          >
+                            {order.status}
+                          </Badge>
                         </div>
-                        <Badge
-                          variant={order.status === 'Delivered' ? 'default' : 'secondary'}
-                          style={order.status === 'Delivered' ? {
-                            backgroundColor: 'var(--jits-cyan)',
-                            color: 'white'
-                          } : {}}
-                        >
-                          {order.status}
-                        </Badge>
+                        <Separator className="my-3" />
+                        <div className="flex items-center justify-between">
+                          <div className="text-sm">
+                            <span className="text-muted-foreground">
+                              {order.itemCount} {order.itemCount === 1 ? 'item' : 'items'}
+                            </span>
+                            <span className="mx-2">•</span>
+                            <span className="font-semibold">R {order.totalAmount.toFixed(2)}</span>
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleViewOrder(order.id)}
+                            disabled={isLoadingOrderDetails}
+                            className="gap-2"
+                          >
+                            {isLoadingOrderDetails ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Eye className="w-4 h-4" />
+                            )}
+                            View Order
+                          </Button>
+                        </div>
                       </div>
-                      <Separator className="my-2" />
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-muted-foreground">{order.items} items</span>
-                        <span>R {order.total.toFixed(2)}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -301,6 +366,13 @@ export function UserProfile() {
           </TabsContent>
         </Tabs>
       </div>
+      {/* Order Details Modal */}
+      {selectedOrder && (
+        <CustomerOrderDetails
+          order={selectedOrder}
+          onClose={() => setSelectedOrder(null)}
+        />
+      )}
     </div>
   );
 }
