@@ -3,6 +3,7 @@ using System;
 using Jits.API.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Jits_Apparel.Server.Migrations
 {
     [DbContext(typeof(JitsDbContext))]
-    partial class JitsDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260109195525_AddOrderItemVariants")]
+    partial class AddOrderItemVariants
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -126,20 +129,6 @@ namespace Jits_Apparel.Server.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<string>("CustomerEmail")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("CustomerName")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("CustomerPhone")
-                        .HasColumnType("text");
-
-                    b.Property<string>("EstimatedDelivery")
-                        .HasColumnType("text");
-
                     b.Property<string>("Notes")
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
@@ -152,46 +141,12 @@ namespace Jits_Apparel.Server.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
 
-                    b.Property<string>("PaymentMethod")
-                        .HasColumnType("text");
-
-                    b.Property<string>("PaymentStatus")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("ShippingAddressLine1")
-                        .HasColumnType("text");
-
-                    b.Property<string>("ShippingAddressLine2")
-                        .HasColumnType("text");
-
-                    b.Property<string>("ShippingCity")
-                        .HasColumnType("text");
-
-                    b.Property<string>("ShippingCountry")
-                        .HasColumnType("text");
-
-                    b.Property<string>("ShippingFullName")
-                        .HasColumnType("text");
-
-                    b.Property<int?>("ShippingMethod")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("ShippingPostalCode")
-                        .HasColumnType("text");
-
-                    b.Property<string>("ShippingProvince")
-                        .HasColumnType("text");
-
                     b.Property<int>("Status")
                         .HasColumnType("integer");
 
                     b.Property<decimal>("TotalAmount")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
-
-                    b.Property<string>("TrackingNumber")
-                        .HasColumnType("text");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");

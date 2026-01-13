@@ -7,7 +7,7 @@
     <RootNamespace>Jits_Apparel.Server</RootNamespace>
     <SpaRoot>..\jits-apparel.client</SpaRoot>
     <SpaProxyLaunchCommand>npm run dev</SpaProxyLaunchCommand>
-    <SpaProxyServerUrl>https://localhost:62169</SpaProxyServerUrl>
+    <SpaProxyServerUrl>https://localhost:5173</SpaProxyServerUrl>
   </PropertyGroup>
 
   <ItemGroup>

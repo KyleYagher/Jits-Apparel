@@ -9,6 +9,7 @@ import { LoginPage } from "../screens/Login";
 import { RegisterPage } from "../screens/Register";
 import { UserProfile } from "../screens/UserProfile";
 import { Dashboard } from "../screens/Dashboard";
+import { OrderHistory } from "../screens/OrderHistory";
 
 export const router = createBrowserRouter([
   {
@@ -42,6 +43,10 @@ export const router = createBrowserRouter([
       {
         path: "dashboard",
         Component: Dashboard,
+      },
+      {
+        path: "orders",
+        Component: OrderHistory,
       },
       {
         path: "login",
