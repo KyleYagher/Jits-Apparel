@@ -282,6 +282,103 @@ export class ApiClient {
   async updateSettings(settings: UpdateStoreSettingsRequest): Promise<StoreSettings> {
     return this.put<StoreSettings>('/settings', settings);
   }
+
+  // Analytics endpoints
+  async getAnalyticsDashboard(params?: AnalyticsParams): Promise<AnalyticsDashboard> {
+    const queryParams = new URLSearchParams();
+    if (params?.fromDate) queryParams.set('fromDate', params.fromDate);
+    if (params?.toDate) queryParams.set('toDate', params.toDate);
+    if (params?.granularity) queryParams.set('granularity', params.granularity);
+
+    const query = queryParams.toString();
+    return this.get<AnalyticsDashboard>(`/analytics/dashboard${query ? `?${query}` : ''}`);
+  }
+
+  async getAnalyticsSummary(params?: AnalyticsParams): Promise<AnalyticsSummary> {
+    const queryParams = new URLSearchParams();
+    if (params?.fromDate) queryParams.set('fromDate', params.fromDate);
+    if (params?.toDate) queryParams.set('toDate', params.toDate);
+
+    const query = queryParams.toString();
+    return this.get<AnalyticsSummary>(`/analytics/summary${query ? `?${query}` : ''}`);
+  }
+
+  async getRevenueAnalytics(params?: AnalyticsParams): Promise<RevenueDataPoint[]> {
+    const queryParams = new URLSearchParams();
+    if (params?.fromDate) queryParams.set('fromDate', params.fromDate);
+    if (params?.toDate) queryParams.set('toDate', params.toDate);
+    if (params?.granularity) queryParams.set('granularity', params.granularity);
+
+    const query = queryParams.toString();
+    return this.get<RevenueDataPoint[]>(`/analytics/revenue${query ? `?${query}` : ''}`);
+  }
+
+  async getOrderVolumeAnalytics(params?: AnalyticsParams): Promise<OrderVolumeDataPoint[]> {
+    const queryParams = new URLSearchParams();
+    if (params?.fromDate) queryParams.set('fromDate', params.fromDate);
+    if (params?.toDate) queryParams.set('toDate', params.toDate);
+    if (params?.granularity) queryParams.set('granularity', params.granularity);
+
+    const query = queryParams.toString();
+    return this.get<OrderVolumeDataPoint[]>(`/analytics/orders${query ? `?${query}` : ''}`);
+  }
+
+  async getTopProductsAnalytics(params?: AnalyticsParams & { limit?: number }): Promise<TopProduct[]> {
+    const queryParams = new URLSearchParams();
+    if (params?.fromDate) queryParams.set('fromDate', params.fromDate);
+    if (params?.toDate) queryParams.set('toDate', params.toDate);
+    if (params?.limit) queryParams.set('limit', params.limit.toString());
+
+    const query = queryParams.toString();
+    return this.get<TopProduct[]>(`/analytics/products/top${query ? `?${query}` : ''}`);
+  }
+
+  async getCategorySalesAnalytics(params?: AnalyticsParams): Promise<CategorySales[]> {
+    const queryParams = new URLSearchParams();
+    if (params?.fromDate) queryParams.set('fromDate', params.fromDate);
+    if (params?.toDate) queryParams.set('toDate', params.toDate);
+
+    const query = queryParams.toString();
+    return this.get<CategorySales[]>(`/analytics/categories${query ? `?${query}` : ''}`);
+  }
+
+  async getInventoryInsights(params?: AnalyticsParams): Promise<InventoryInsights> {
+    const queryParams = new URLSearchParams();
+    if (params?.fromDate) queryParams.set('fromDate', params.fromDate);
+    if (params?.toDate) queryParams.set('toDate', params.toDate);
+
+    const query = queryParams.toString();
+    return this.get<InventoryInsights>(`/analytics/inventory${query ? `?${query}` : ''}`);
+  }
+
+  async getCustomerAnalytics(params?: AnalyticsParams): Promise<CustomerAnalytics> {
+    const queryParams = new URLSearchParams();
+    if (params?.fromDate) queryParams.set('fromDate', params.fromDate);
+    if (params?.toDate) queryParams.set('toDate', params.toDate);
+
+    const query = queryParams.toString();
+    return this.get<CustomerAnalytics>(`/analytics/customers${query ? `?${query}` : ''}`);
+  }
+
+  async exportAnalyticsCsv(params: AnalyticsExportParams): Promise<Blob> {
+    const queryParams = new URLSearchParams();
+    if (params.fromDate) queryParams.set('fromDate', params.fromDate);
+    if (params.toDate) queryParams.set('toDate', params.toDate);
+    queryParams.set('type', params.type);
+
+    const token = this.getAuthToken();
+    const response = await fetch(`${API_BASE_URL}/analytics/export/csv?${queryParams.toString()}`, {
+      headers: {
+        ...(token && { 'Authorization': `Bearer ${token}` })
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to export data');
+    }
+
+    return response.blob();
+  }
 }
 
 export interface Product {
@@ -670,6 +767,158 @@ export interface UpdateStoreSettingsRequest {
   storePostalCode?: string;
   storeCountry?: string;
   freeShippingThreshold?: number;
+}
+
+// Analytics types
+export interface AnalyticsParams {
+  fromDate?: string;
+  toDate?: string;
+  granularity?: 'daily' | 'weekly' | 'monthly';
+}
+
+export interface AnalyticsExportParams {
+  fromDate?: string;
+  toDate?: string;
+  type: 'orders' | 'revenue' | 'products' | 'customers';
+}
+
+export interface AnalyticsDashboard {
+  summary: AnalyticsSummary;
+  revenueOverTime: RevenueDataPoint[];
+  orderVolumeOverTime: OrderVolumeDataPoint[];
+  salesByCategory: CategorySales[];
+  topProducts: TopProduct[];
+  inventoryInsights: InventoryInsights;
+  customerAnalytics: CustomerAnalytics;
+}
+
+export interface AnalyticsSummary {
+  totalRevenue: number;
+  previousPeriodRevenue: number;
+  revenueChangePercent: number;
+  totalOrders: number;
+  previousPeriodOrders: number;
+  ordersChangePercent: number;
+  averageOrderValue: number;
+  previousAverageOrderValue: number;
+  aovChangePercent: number;
+  totalCustomers: number;
+  newCustomers: number;
+  returningCustomers: number;
+  customerRetentionRate: number;
+  previousRetentionRate: number;
+  retentionChangePercent: number;
+  totalProductsSold: number;
+}
+
+export interface RevenueDataPoint {
+  period: string;
+  date: string;
+  grossRevenue: number;
+  netRevenue: number;
+  shippingRevenue: number;
+  orderCount: number;
+}
+
+export interface OrderVolumeDataPoint {
+  period: string;
+  date: string;
+  totalOrders: number;
+  pendingOrders: number;
+  processingOrders: number;
+  shippedOrders: number;
+  deliveredOrders: number;
+  cancelledOrders: number;
+  averageOrderValue: number;
+}
+
+export interface CategorySales {
+  categoryId: number;
+  categoryName: string;
+  revenue: number;
+  unitsSold: number;
+  orderCount: number;
+  percentageOfTotal: number;
+  color: string;
+}
+
+export interface TopProduct {
+  productId: number;
+  productName: string;
+  productImageUrl?: string;
+  categoryName: string;
+  unitsSold: number;
+  revenue: number;
+  averagePrice: number;
+  currentStock: number;
+  stockStatus: 'critical' | 'low' | 'good';
+  revenuePercentOfTotal: number;
+}
+
+export interface InventoryInsights {
+  totalProducts: number;
+  activeProducts: number;
+  lowStockCount: number;
+  outOfStockCount: number;
+  lowStockAlerts: LowStockAlert[];
+  fastMovers: ProductPerformance[];
+  slowMovers: ProductPerformance[];
+  fastMoverCount: number;
+  slowMoverCount: number;
+  deadStockCount: number;
+}
+
+export interface LowStockAlert {
+  productId: number;
+  productName: string;
+  size?: string;
+  currentStock: number;
+  reorderThreshold: number;
+  urgency: 'critical' | 'low' | 'reorder';
+  weeklySalesRate: number;
+  daysUntilStockout: number;
+}
+
+export interface ProductPerformance {
+  productId: number;
+  productName: string;
+  unitsSold: number;
+  revenue: number;
+  currentStock: number;
+  weeklySalesRate: number;
+  daysSinceLastSale: number;
+}
+
+export interface CustomerAnalytics {
+  totalCustomers: number;
+  newCustomers: number;
+  returningCustomers: number;
+  newCustomerPercent: number;
+  returningCustomerPercent: number;
+  averageCustomerLifetimeValue: number;
+  topCustomers: TopCustomer[];
+  customerSegments: CustomerSegment[];
+}
+
+export interface TopCustomer {
+  userId: number;
+  customerName: string;
+  customerEmail: string;
+  totalOrders: number;
+  lifetimeValue: number;
+  averageOrderValue: number;
+  firstOrderDate: string;
+  lastOrderDate: string;
+  segment: 'VIP' | 'Loyal' | 'Regular' | 'New' | 'At Risk';
+}
+
+export interface CustomerSegment {
+  segmentName: string;
+  customerCount: number;
+  percentageOfTotal: number;
+  totalRevenue: number;
+  averageOrderValue: number;
+  description: string;
 }
 
 export const apiClient = new ApiClient();

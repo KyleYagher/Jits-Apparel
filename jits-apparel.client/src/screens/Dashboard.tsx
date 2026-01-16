@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../../context/useAuth';
 import Papa from 'papaparse';
-import { apiClient, ProductUploadDto, Product, CarouselItem, CreateCarouselItemDto, UpdateCarouselItemDto, ReorderCarouselItemDto, OrderSummary, Order, ShippingRate, CreateShipmentRequest, TrackingResponse, StoreSettings } from '../services/api';
+import { apiClient, ProductUploadDto, Product, CarouselItem, CreateCarouselItemDto, UpdateCarouselItemDto, ReorderCarouselItemDto, OrderSummary, Order, ShippingRate, CreateShipmentRequest, TrackingResponse, StoreSettings, AnalyticsDashboard, AnalyticsParams } from '../services/api';
 import { toast } from 'sonner';
 import {
   Package,
@@ -27,7 +27,8 @@ import {
   Loader2,
   Send,
   Ban,
-  Settings
+  Settings, 
+  AlertTriangle
 } from 'lucide-react';
 import { ProductDetail } from '../components/ProductDetail';
 import { EditProduct } from '../components/EditProduct';
@@ -42,22 +43,42 @@ import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSo
 import { CSS } from '@dnd-kit/utilities';
 import { OrderDetails } from '../components/OrderDetails';
 
-// Mock data
-const salesData = [
-  { month: 'Jan', sales: 12400, orders: 145 },
-  { month: 'Feb', sales: 19800, orders: 234 },
-  { month: 'Mar', sales: 15200, orders: 189 },
-  { month: 'Apr', sales: 22100, orders: 267 },
-  { month: 'May', sales: 28500, orders: 312 },
-  { month: 'Jun', sales: 31200, orders: 345 },
-];
+// Date range options for analytics
+type DateRangeOption = '7d' | '30d' | '90d' | 'ytd' | 'custom';
 
-const categoryData = [
-  { name: 'Graphic Tees', value: 400, color: '#ec4899' },
-  { name: 'Plain Tees', value: 300, color: '#f97316' },
-  { name: 'Limited Edition', value: 200, color: '#eab308' },
-  { name: 'Accessories', value: 100, color: '#06b6d4' },
-];
+const getDateRange = (option: DateRangeOption): { fromDate: string; toDate: string } => {
+  const now = new Date();
+  const toDate = now.toISOString().split('T')[0];
+  let fromDate: string;
+
+  switch (option) {
+    case '7d':
+      fromDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      break;
+    case '30d':
+      fromDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      break;
+    case '90d':
+      fromDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      break;
+    case 'ytd':
+      fromDate = new Date(now.getFullYear(), 0, 1).toISOString().split('T')[0];
+      break;
+    default:
+      fromDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+  }
+
+  return { fromDate, toDate };
+};
+
+const formatCurrency = (amount: number): string => {
+  return `R${amount.toLocaleString('en-ZA', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+};
+
+const formatPercent = (value: number): string => {
+  const sign = value >= 0 ? '+' : '';
+  return `${sign}${value.toFixed(1)}%`;
+};
 
 
 // Delivery tab types
@@ -86,6 +107,38 @@ interface SortableCarouselItemProps {
   onDelete: (item: CarouselItem) => void;
   onToggleActive: (item: CarouselItem) => void;
 }
+
+type SalesDataEntry = {
+  month: string;
+  sales: number;
+  orders: number;
+};
+
+const salesData: SalesDataEntry[] = [
+  { month: 'Jan', sales: 42000, orders: 120 },
+  { month: 'Feb', sales: 51000, orders: 145 },
+  { month: 'Mar', sales: 47000, orders: 132 },
+  { month: 'Apr', sales: 62000, orders: 178 },
+  { month: 'May', sales: 70000, orders: 201 },
+  { month: 'Jun', sales: 68000, orders: 190 },
+];
+
+type CategoryDataEntry = {
+  name: string;
+  value: number;
+  color: string;
+};
+
+const categoryData: CategoryDataEntry[] = [
+  { name: 'Graphic Tees', value: 420, color: '#ec4899' },
+  { name: 'Plain Tees', value: 310, color: '#06b6d4' },
+  { name: 'Limited Editions', value: 180, color: '#8b5cf6' },
+  { name: 'Oversized Fits', value: 260, color: '#22c55e' },
+];
+
+
+
+
 
 function SortableCarouselItem({ item, onEdit, onDelete, onToggleActive }: SortableCarouselItemProps) {
   const {
@@ -251,6 +304,13 @@ export function Dashboard() {
   const [storeSettings, setStoreSettings] = useState<StoreSettings | null>(null);
   const [loadingSettings, setLoadingSettings] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
+
+  // Analytics state
+  const [analyticsData, setAnalyticsData] = useState<AnalyticsDashboard | null>(null);
+  const [loadingAnalytics, setLoadingAnalytics] = useState(false);
+  const [analyticsDateRange, setAnalyticsDateRange] = useState<DateRangeOption>('30d');
+  const [analyticsGranularity, setAnalyticsGranularity] = useState<AnalyticsParams['granularity']>('daily');
+  const [exportingCsv, setExportingCsv] = useState(false);
 
   // Filter products based on search term
   const filteredProducts = products.filter((product) => {
@@ -679,6 +739,55 @@ export function Dashboard() {
       fetchSettings();
     }
   }, [activeTab]);
+
+  // Analytics data fetching
+  const fetchAnalytics = useCallback(async () => {
+    try {
+      setLoadingAnalytics(true);
+      const { fromDate, toDate } = getDateRange(analyticsDateRange);
+      const data = await apiClient.getAnalyticsDashboard({
+        fromDate,
+        toDate,
+        granularity: analyticsGranularity,
+      });
+      setAnalyticsData(data);
+    } catch (error) {
+      console.error('Error fetching analytics:', error);
+      toast.error(`Failed to load analytics: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setLoadingAnalytics(false);
+    }
+  }, [analyticsDateRange, analyticsGranularity]);
+
+  useEffect(() => {
+    if (activeTab === 'analytics') {
+      fetchAnalytics();
+    }
+  }, [activeTab, fetchAnalytics]);
+
+  const handleExportCsv = async (type: 'orders' | 'revenue' | 'products' | 'customers') => {
+    try {
+      setExportingCsv(true);
+      const { fromDate, toDate } = getDateRange(analyticsDateRange);
+      const blob = await apiClient.exportAnalyticsCsv({ fromDate, toDate, type });
+
+      // Create download link
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${type}-export-${fromDate}-to-${toDate}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      toast.success(`${type.charAt(0).toUpperCase() + type.slice(1)} data exported successfully`);
+    } catch (error) {
+      toast.error(`Failed to export data: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setExportingCsv(false);
+    }
+  };
 
   const handleSaveSettings = async () => {
     if (!storeSettings) return;
@@ -1712,81 +1821,410 @@ export function Dashboard() {
         {/* Analytics Tab */}
         {activeTab === 'analytics' && (
           <div className="space-y-6">
-            {/* Detailed Charts */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div className="bg-card border rounded-lg p-6">
-                <h3 className="text-lg font-semibold mb-4">Monthly Revenue</h3>
-                <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={salesData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="month" />
-                    <YAxis />
-                    <Tooltip />
-                    <Legend />
-                    <Bar dataKey="sales" fill="#ec4899" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-
-              <div className="bg-card border rounded-lg p-6">
-                <h3 className="text-lg font-semibold mb-4">Order Volume</h3>
-                <ResponsiveContainer width="100%" height={300}>
-                  <LineChart data={salesData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="month" />
-                    <YAxis />
-                    <Tooltip />
-                    <Legend />
-                    <Line type="monotone" dataKey="orders" stroke="#06b6d4" strokeWidth={2} />
-                  </LineChart>
-                </ResponsiveContainer>
+            {/* Date Range & Export Controls */}
+            <div className="bg-card border rounded-lg p-4">
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div className="flex items-center gap-2">
+                  <label className="text-sm font-medium">Date Range:</label>
+                  <select
+                    title='Select Date Range'
+                    value={analyticsDateRange}
+                    onChange={(e) => setAnalyticsDateRange(e.target.value as DateRangeOption)}
+                    className="px-3 py-1.5 border rounded-md text-sm bg-background"
+                  >
+                    <option value="7d">Last 7 days</option>
+                    <option value="30d">Last 30 days</option>
+                    <option value="90d">Last 90 days</option>
+                    <option value="ytd">Year to Date</option>
+                  </select>
+                  <select
+                    title='Select Granularity'
+                    value={analyticsGranularity}
+                    onChange={(e) => setAnalyticsGranularity(e.target.value as AnalyticsParams['granularity'])}
+                    className="px-3 py-1.5 border rounded-md text-sm bg-background"
+                  >
+                    <option value="daily">Daily</option>
+                    <option value="weekly">Weekly</option>
+                    <option value="monthly">Monthly</option>
+                  </select>
+                  <button
+                    onClick={() => fetchAnalytics()}
+                    disabled={loadingAnalytics}
+                    className="px-3 py-1.5 border rounded-md text-sm hover:bg-muted transition-colors flex items-center gap-1"
+                  >
+                    <RefreshCw className={`h-4 w-4 ${loadingAnalytics ? 'animate-spin' : ''}`} />
+                    Refresh
+                  </button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <select
+                    onChange={(e) => e.target.value && handleExportCsv(e.target.value as 'orders' | 'revenue' | 'products' | 'customers')}
+                    disabled={exportingCsv}
+                    className="px-3 py-1.5 border rounded-md text-sm bg-background"
+                    defaultValue=""
+                    aria-label="Export analytics data"
+                    title="Export analytics data"
+                  >
+                    <option value="" disabled>Export CSV...</option>
+                    <option value="orders">Orders Data</option>
+                    <option value="revenue">Revenue Data</option>
+                    <option value="products">Products Data</option>
+                    <option value="customers">Customers Data</option>
+                  </select>
+                  {exportingCsv && <Loader2 className="h-4 w-4 animate-spin" />}
+                </div>
               </div>
             </div>
 
-            {/* Metrics Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="bg-card border rounded-lg p-4">
-                <h4 className="text-sm text-muted-foreground mb-1">Avg Order Value</h4>
-                <p className="text-2xl font-bold">R867</p>
-                <p className="text-sm text-green-600 dark:text-green-400 mt-1">+5.2%</p>
+            {loadingAnalytics && !analyticsData ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
               </div>
-              <div className="bg-card border rounded-lg p-4">
-                <h4 className="text-sm text-muted-foreground mb-1">Conversion Rate</h4>
-                <p className="text-2xl font-bold">3.24%</p>
-                <p className="text-sm text-green-600 dark:text-green-400 mt-1">+0.8%</p>
-              </div>
-              <div className="bg-card border rounded-lg p-4">
-                <h4 className="text-sm text-muted-foreground mb-1">Cart Abandonment</h4>
-                <p className="text-2xl font-bold">68.5%</p>
-                <p className="text-sm text-red-600 dark:text-red-400 mt-1">-2.1%</p>
-              </div>
-              <div className="bg-card border rounded-lg p-4">
-                <h4 className="text-sm text-muted-foreground mb-1">Customer Retention</h4>
-                <p className="text-2xl font-bold">42.3%</p>
-                <p className="text-sm text-green-600 dark:text-green-400 mt-1">+7.4%</p>
-              </div>
-            </div>
-
-            {/* Top Products */}
-            <div className="bg-card border rounded-lg p-6">
-              <h3 className="text-lg font-semibold mb-4">Top Selling Products</h3>
-              <div className="space-y-3">
-                {[
-                  { name: 'Jits Sunset Tee', sales: 245, revenue: 'R146,755' },
-                  { name: 'Urban Vibes Graphic Tee', sales: 198, revenue: 'R118,602' },
-                  { name: 'Retro Flow Limited Edition', sales: 156, revenue: 'R124,344' },
-                  { name: 'Classic Plain White', sales: 142, revenue: 'R85,158' },
-                ].map((product, index) => (
-                  <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
-                    <div className="flex-1">
-                      <p className="font-medium">{product.name}</p>
-                      <p className="text-sm text-muted-foreground">{product.sales} units sold</p>
+            ) : analyticsData ? (
+              <>
+                {/* Revenue & Order Volume Charts */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <div className="bg-card border rounded-lg p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <div>
+                        <h3 className="text-lg font-semibold">Revenue Over Time</h3>
+                        <p className="text-sm text-muted-foreground">Gross revenue trends</p>
+                      </div>
                     </div>
-                    <p className="font-semibold">{product.revenue}</p>
+                    <div className="mb-3">
+                      <p className="text-3xl font-bold">{formatCurrency(analyticsData.summary.totalRevenue)}</p>
+                      <p className={`text-sm mt-1 ${analyticsData.summary.revenueChangePercent >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                        {formatPercent(analyticsData.summary.revenueChangePercent)} vs previous period
+                      </p>
+                    </div>
+                    <ResponsiveContainer width="100%" height={250}>
+                      <BarChart data={analyticsData.revenueOverTime}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="period" />
+                        <YAxis tickFormatter={(value) => `R${(value / 1000).toFixed(0)}k`} />
+                        <Tooltip formatter={(value: number) => formatCurrency(value)} />
+                        <Legend />
+                        <Bar dataKey="grossRevenue" fill="#ec4899" name="Revenue" />
+                      </BarChart>
+                    </ResponsiveContainer>
                   </div>
-                ))}
+
+                  <div className="bg-card border rounded-lg p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <div>
+                        <h3 className="text-lg font-semibold">Order Volume</h3>
+                        <p className="text-sm text-muted-foreground">Orders with AOV overlay</p>
+                      </div>
+                    </div>
+                    <div className="mb-3">
+                      <p className="text-3xl font-bold">{analyticsData.summary.totalOrders.toLocaleString()} orders</p>
+                      <p className={`text-sm mt-1 ${analyticsData.summary.ordersChangePercent >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                        {formatPercent(analyticsData.summary.ordersChangePercent)} vs previous period
+                      </p>
+                    </div>
+                    <ResponsiveContainer width="100%" height={250}>
+                      <LineChart data={analyticsData.orderVolumeOverTime}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="period" />
+                        <YAxis yAxisId="left" />
+                        <YAxis yAxisId="right" orientation="right" tickFormatter={(value) => `R${value.toFixed(0)}`} />
+                        <Tooltip />
+                        <Legend />
+                        <Line yAxisId="left" type="monotone" dataKey="totalOrders" stroke="#06b6d4" strokeWidth={2} name="Orders" />
+                        <Line yAxisId="right" type="monotone" dataKey="averageOrderValue" stroke="#f97316" strokeWidth={2} strokeDasharray="5 5" name="Avg Order Value" />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                {/* Key Commerce Metrics */}
+                <div className="bg-card border rounded-lg p-6">
+                  <h3 className="text-lg font-semibold mb-4">Key Commerce Metrics</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="border rounded-lg p-4 hover:shadow-md transition-shadow cursor-help" title="Indicates upsell/bundle success. Higher is better.">
+                      <h4 className="text-sm text-muted-foreground mb-1 flex items-center gap-1">
+                        Avg Order Value (AOV)
+                        <span className="text-xs">ℹ️</span>
+                      </h4>
+                      <p className="text-2xl font-bold">{formatCurrency(analyticsData.summary.averageOrderValue)}</p>
+                      <p className={`text-sm mt-1 ${analyticsData.summary.aovChangePercent >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                        {formatPercent(analyticsData.summary.aovChangePercent)} from {formatCurrency(analyticsData.summary.previousAverageOrderValue)}
+                      </p>
+                    </div>
+                    <div className="border rounded-lg p-4 hover:shadow-md transition-shadow cursor-help" title="Total products sold in period">
+                      <h4 className="text-sm text-muted-foreground mb-1 flex items-center gap-1">
+                        Products Sold
+                        <span className="text-xs">ℹ️</span>
+                      </h4>
+                      <p className="text-2xl font-bold">{analyticsData.summary.totalProductsSold.toLocaleString()}</p>
+                      <p className="text-sm text-muted-foreground mt-1">units in period</p>
+                    </div>
+                    <div className="border rounded-lg p-4 hover:shadow-md transition-shadow cursor-help" title="Total unique customers">
+                      <h4 className="text-sm text-muted-foreground mb-1 flex items-center gap-1">
+                        Total Customers
+                        <span className="text-xs">ℹ️</span>
+                      </h4>
+                      <p className="text-2xl font-bold">{analyticsData.summary.totalCustomers.toLocaleString()}</p>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        {analyticsData.summary.newCustomers} new, {analyticsData.summary.returningCustomers} returning
+                      </p>
+                    </div>
+                    <div className="border rounded-lg p-4 hover:shadow-md transition-shadow cursor-help" title="Measures brand loyalty - very important">
+                      <h4 className="text-sm text-muted-foreground mb-1 flex items-center gap-1">
+                        Customer Retention
+                        <span className="text-xs">ℹ️</span>
+                      </h4>
+                      <p className="text-2xl font-bold">{analyticsData.summary.customerRetentionRate.toFixed(1)}%</p>
+                      <p className={`text-sm mt-1 ${analyticsData.summary.retentionChangePercent >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                        {formatPercent(analyticsData.summary.retentionChangePercent)} from {analyticsData.summary.previousRetentionRate.toFixed(1)}%
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Category Sales Chart */}
+                {analyticsData.salesByCategory.length > 0 && (
+                  <div className="bg-card border rounded-lg p-6">
+                    <h3 className="text-lg font-semibold mb-4">Sales by Category</h3>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                      <ResponsiveContainer width="100%" height={250}>
+                        <PieChart>
+                          <Pie
+                            data={analyticsData.salesByCategory}
+                            dataKey="revenue"
+                            nameKey="categoryName"
+                            cx="50%"
+                            cy="50%"
+                            outerRadius={80}
+                            label={({ categoryName, percentageOfTotal }) => `${categoryName} (${percentageOfTotal.toFixed(1)}%)`}
+                          >
+                            {analyticsData.salesByCategory.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={entry.color} />
+                            ))}
+                          </Pie>
+                          <Tooltip formatter={(value: number) => formatCurrency(value)} />
+                        </PieChart>
+                      </ResponsiveContainer>
+                      <div className="space-y-2">
+                        {analyticsData.salesByCategory.map((category, idx) => (
+                          <div key={idx} className="flex items-center justify-between p-2 border rounded">
+                            <div className="flex items-center gap-2">
+                              <div className="w-3 h-3 rounded-full" style={{ backgroundColor: category.color }} />
+                              <span className="text-sm font-medium">{category.categoryName}</span>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-sm font-semibold">{formatCurrency(category.revenue)}</p>
+                              <p className="text-xs text-muted-foreground">{category.unitsSold} units</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Product Performance */}
+                <div className="bg-card border rounded-lg p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h3 className="text-lg font-semibold">Top Selling Products</h3>
+                      <p className="text-sm text-muted-foreground">Performance insights with stock levels</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('products')}
+                      className="text-sm text-pink-600 dark:text-pink-400 hover:underline"
+                    >
+                      View All Products
+                    </button>
+                  </div>
+                  <div className="space-y-3">
+                    {analyticsData.topProducts.length > 0 ? (
+                      analyticsData.topProducts.map((product, index) => (
+                        <div
+                          key={product.productId}
+                          className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors"
+                        >
+                          <div className="flex-1">
+                            <div className="flex items-center gap-3">
+                              <div className="text-lg font-semibold text-muted-foreground">#{index + 1}</div>
+                              <div>
+                                <p className="font-medium">{product.productName}</p>
+                                <p className="text-sm text-muted-foreground">
+                                  {product.unitsSold} sold | {product.categoryName}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-4">
+                            <div className="text-right">
+                              <p className="font-semibold">{formatCurrency(product.revenue)}</p>
+                              <div className="flex items-center gap-2 mt-1">
+                                <span className="text-xs text-muted-foreground">Stock:</span>
+                                <span className={`text-xs px-2 py-0.5 rounded-full ${
+                                  product.stockStatus === 'critical'
+                                    ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
+                                    : product.stockStatus === 'low'
+                                    ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400'
+                                    : 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
+                                }`}>
+                                  {product.currentStock} units
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-center text-muted-foreground py-4">No product sales data for this period</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Inventory Insights & Customer Analytics */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Inventory Insights */}
+                  <div className="bg-card border rounded-lg p-6">
+                    <h3 className="text-lg font-semibold mb-4">Inventory Insights</h3>
+
+                    {/* Low Stock Alerts */}
+                    <div className="mb-6">
+                      <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                        <AlertTriangle className="h-4 w-4 text-yellow-600 dark:text-yellow-400" />
+                        Low Stock Alerts ({analyticsData.inventoryInsights.lowStockCount})
+                      </h4>
+                      <div className="space-y-2">
+                        {analyticsData.inventoryInsights.lowStockAlerts.length > 0 ? (
+                          analyticsData.inventoryInsights.lowStockAlerts.slice(0, 5).map((item, idx) => (
+                            <div key={idx} className={`flex items-center justify-between p-2 border rounded text-sm ${
+                              item.urgency === 'critical'
+                                ? 'bg-red-50 dark:bg-red-900/10 border-red-200 dark:border-red-800'
+                                : 'bg-yellow-50 dark:bg-yellow-900/10 border-yellow-200 dark:border-yellow-800'
+                            }`}>
+                              <span>{item.productName}</span>
+                              <div className="flex items-center gap-2">
+                                <span className="font-semibold">{item.currentStock} left</span>
+                                <span className={`text-xs px-2 py-0.5 rounded ${
+                                  item.urgency === 'critical' ? 'bg-red-200 dark:bg-red-800 text-red-800 dark:text-red-200' : 'bg-yellow-200 dark:bg-yellow-800 text-yellow-800 dark:text-yellow-200'
+                                }`}>
+                                  {item.urgency === 'critical' ? 'Critical' : 'Reorder'}
+                                </span>
+                              </div>
+                            </div>
+                          ))
+                        ) : (
+                          <p className="text-sm text-muted-foreground">No low stock alerts</p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Performance Categories */}
+                    <div>
+                      <h4 className="text-sm font-semibold mb-3">Inventory Status</h4>
+                      <div className="space-y-3">
+                        <div className="p-3 bg-green-50 dark:bg-green-900/10 border border-green-200 dark:border-green-800 rounded">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-sm font-medium">Fast Movers</span>
+                            <span className="text-sm font-bold">{analyticsData.inventoryInsights.fastMoverCount} products</span>
+                          </div>
+                          <p className="text-xs text-muted-foreground">Selling 20+ units/week</p>
+                        </div>
+                        <div className="p-3 bg-orange-50 dark:bg-orange-900/10 border border-orange-200 dark:border-orange-800 rounded">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-sm font-medium">Dead Stock</span>
+                            <span className="text-sm font-bold">{analyticsData.inventoryInsights.deadStockCount} products</span>
+                          </div>
+                          <p className="text-xs text-muted-foreground">2 or fewer sales in period</p>
+                        </div>
+                        <div className="p-3 border rounded">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-sm font-medium">Out of Stock</span>
+                            <span className="text-sm font-bold">{analyticsData.inventoryInsights.outOfStockCount} products</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Customer Analytics */}
+                  <div className="bg-card border rounded-lg p-6">
+                    <h3 className="text-lg font-semibold mb-4">Customer Analytics</h3>
+
+                    {/* New vs Returning */}
+                    <div className="mb-6">
+                      <h4 className="text-sm font-semibold mb-3">New vs Returning Customers</h4>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="p-3 border rounded-lg">
+                          <p className="text-sm text-muted-foreground mb-1">New Customers</p>
+                          <p className="text-2xl font-bold">{analyticsData.customerAnalytics.newCustomerPercent.toFixed(0)}%</p>
+                          <p className="text-xs text-muted-foreground mt-1">{analyticsData.customerAnalytics.newCustomers} customers</p>
+                        </div>
+                        <div className="p-3 border rounded-lg">
+                          <p className="text-sm text-muted-foreground mb-1">Returning</p>
+                          <p className="text-2xl font-bold">{analyticsData.customerAnalytics.returningCustomerPercent.toFixed(0)}%</p>
+                          <p className="text-xs text-muted-foreground mt-1">{analyticsData.customerAnalytics.returningCustomers} customers</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Top Customers */}
+                    <div>
+                      <h4 className="text-sm font-semibold mb-3">Top Customers by Lifetime Value</h4>
+                      <div className="space-y-2">
+                        {analyticsData.customerAnalytics.topCustomers.length > 0 ? (
+                          analyticsData.customerAnalytics.topCustomers.slice(0, 4).map((customer, idx) => (
+                            <div key={idx} className="flex items-center justify-between p-2 border rounded text-sm hover:bg-muted/50 transition-colors">
+                              <div className="flex items-center gap-2">
+                                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-pink-500 to-cyan-500 flex items-center justify-center text-white text-xs font-bold">
+                                  {customer.customerName.charAt(0)}
+                                </div>
+                                <div>
+                                  <p className="font-medium">{customer.customerName}</p>
+                                  <p className="text-xs text-muted-foreground">{customer.totalOrders} orders</p>
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                <p className="font-semibold">{formatCurrency(customer.lifetimeValue)}</p>
+                                <span className={`text-xs px-2 py-0.5 rounded-full ${
+                                  customer.segment === 'VIP'
+                                    ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400'
+                                    : customer.segment === 'Loyal'
+                                    ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400'
+                                    : 'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400'
+                                }`}>
+                                  {customer.segment}
+                                </span>
+                              </div>
+                            </div>
+                          ))
+                        ) : (
+                          <p className="text-sm text-muted-foreground">No customer data available</p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Customer Segments Summary */}
+                    {analyticsData.customerAnalytics.customerSegments.length > 0 && (
+                      <div className="mt-4 pt-4 border-t">
+                        <h4 className="text-sm font-semibold mb-3">Customer Segments</h4>
+                        <div className="grid grid-cols-2 gap-2">
+                          {analyticsData.customerAnalytics.customerSegments.map((segment, idx) => (
+                            <div key={idx} className="p-2 bg-muted/30 rounded text-xs">
+                              <p className="font-medium">{segment.segmentName}</p>
+                              <p className="text-muted-foreground">{segment.customerCount} ({segment.percentageOfTotal.toFixed(1)}%)</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="text-center py-12 text-muted-foreground">
+                <p>No analytics data available. Try adjusting the date range.</p>
               </div>
-            </div>
+            )}
           </div>
         )}
 
