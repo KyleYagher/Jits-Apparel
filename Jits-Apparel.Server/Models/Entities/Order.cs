@@ -25,6 +25,15 @@ public class Order
     public string? ShippingPostalCode { get; set; }
     public string? ShippingCountry { get; set; }
 
+    // Ship Logic integration fields
+    public int? ShipLogicShipmentId { get; set; }
+    public string? CarrierName { get; set; }
+    public decimal? ShippingCost { get; set; }
+    public string? ServiceLevelCode { get; set; }
+    public string? ServiceLevelName { get; set; }
+    public DateTime? ShippedDate { get; set; }
+    public DateTime? DeliveredDate { get; set; }
+
     // Payment information
     public string? PaymentMethod { get; set; }
     public string PaymentStatus { get; set; } = "Pending";

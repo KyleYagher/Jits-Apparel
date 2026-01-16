@@ -6,7 +6,6 @@ import { ProductDetail } from '../components/ProductDetail';
 import { SplashScreen } from '../components/SplashScreen';
 import { apiClient, Product as ApiProduct, CarouselItem } from '../services/api';
 import { Product } from '../../types/types';
-import '../App.css';
 
 export default function HomeScreen() {
   const navigate = useNavigate();

@@ -307,8 +307,14 @@ export function InvoicePDF({ invoice, logoBase64 }: InvoicePDFProps) {
               <Image style={styles.logo} src={logoBase64} />
             )}
             <View style={styles.brandTextContainer}>
-              <Text style={styles.brandName}>Jits</Text>
+              <Text style={styles.brandName}>{invoice.storeName || 'Jits'}</Text>
               <Text style={styles.brandTagline}>Premium Streetwear</Text>
+              {invoice.vatNumber && (
+                <Text style={styles.brandTagline}>VAT No: {invoice.vatNumber}</Text>
+              )}
+              {invoice.storeAddress && (
+                <Text style={styles.brandTagline}>{invoice.storeAddress}</Text>
+              )}
             </View>
           </View>
           <View style={styles.invoiceInfo}>
@@ -388,23 +394,30 @@ export function InvoicePDF({ invoice, logoBase64 }: InvoicePDFProps) {
         {/* Totals */}
         <View style={styles.totalsSection}>
           <View style={styles.totalsRow}>
-            <Text style={styles.totalsLabel}>Subtotal:</Text>
+            <Text style={styles.totalsLabel}>Subtotal (excl. VAT):</Text>
             <Text style={styles.totalsValue}>{formatCurrency(invoice.subtotal)}</Text>
           </View>
-          {invoice.shipping > 0 && (
-            <View style={styles.totalsRow}>
-              <Text style={styles.totalsLabel}>Shipping:</Text>
-              <Text style={styles.totalsValue}>{formatCurrency(invoice.shipping)}</Text>
-            </View>
-          )}
           {invoice.tax > 0 && (
             <View style={styles.totalsRow}>
-              <Text style={styles.totalsLabel}>Tax:</Text>
+              <Text style={styles.totalsLabel}>VAT ({invoice.taxRate || 15}%):</Text>
               <Text style={styles.totalsValue}>{formatCurrency(invoice.tax)}</Text>
             </View>
           )}
+          {invoice.shipping > 0 ? (
+            <View style={styles.totalsRow}>
+              <Text style={styles.totalsLabel}>
+                Shipping{invoice.serviceLevelName ? ` (${invoice.serviceLevelName})` : ''}:
+              </Text>
+              <Text style={styles.totalsValue}>{formatCurrency(invoice.shipping)}</Text>
+            </View>
+          ) : (
+            <View style={styles.totalsRow}>
+              <Text style={styles.totalsLabel}>Shipping:</Text>
+              <Text style={[styles.totalsValue, { color: '#22c55e' }]}>Free</Text>
+            </View>
+          )}
           <View style={styles.grandTotalRow}>
-            <Text style={styles.grandTotalLabel}>Total:</Text>
+            <Text style={styles.grandTotalLabel}>Total (incl. VAT):</Text>
             <Text style={styles.grandTotalValue}>{formatCurrency(invoice.total)}</Text>
           </View>
         </View>
@@ -431,9 +444,9 @@ export function InvoicePDF({ invoice, logoBase64 }: InvoicePDFProps) {
         <View style={styles.footer}>
           <Text style={styles.footerText}>Thank you for shopping with us!</Text>
           <Text style={styles.footerText}>
-            Questions? Contact us at support@jitsapparel.co.za
+            Questions? Contact us at {invoice.storeEmail || 'support@jitsapparel.co.za'}
           </Text>
-          <Text style={styles.footerBrand}>JITS APPAREL - Premium Streetwear</Text>
+          <Text style={styles.footerBrand}>{(invoice.storeName || 'JITS APPAREL').toUpperCase()} - Premium Streetwear</Text>
         </View>
       </Page>
     </Document>

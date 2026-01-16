@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Package, Clock, Truck, CheckCircle, XCircle, ChevronRight, Loader2, ShoppingBag } from 'lucide-react';
+import { Package, Clock, Truck, CheckCircle, XCircle, ChevronRight, Loader2, ShoppingBag, MapPin } from 'lucide-react';
 import { useAuth } from '../../context/useAuth';
-import { apiClient, type OrderSummary, type Order } from '../services/api';
+import { apiClient, type OrderSummary, type Order, type PublicStoreSettings } from '../services/api';
 import { toast } from 'sonner';
+import OrderTracking from '../components/OrderTracking';
 
 const statusConfig: Record<string, { icon: React.ElementType; color: string; bg: string }> = {
   Pending: { icon: Clock, color: 'text-yellow-600', bg: 'bg-yellow-100 dark:bg-yellow-900/30' },
@@ -20,6 +21,21 @@ export function OrderHistory() {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingDetails, setLoadingDetails] = useState(false);
+  const [showTracking, setShowTracking] = useState(false);
+  const [storeSettings, setStoreSettings] = useState<PublicStoreSettings | null>(null);
+
+  // Fetch store settings for VAT calculation
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        const settings = await apiClient.getPublicSettings();
+        setStoreSettings(settings);
+      } catch (error) {
+        console.error('Failed to load store settings:', error);
+      }
+    };
+    fetchSettings();
+  }, []);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -55,6 +71,11 @@ export function OrderHistory() {
 
   const closeDetails = () => {
     setSelectedOrder(null);
+    setShowTracking(false);
+  };
+
+  const viewTracking = () => {
+    setShowTracking(true);
   };
 
   const formatDate = (dateString: string) => {
@@ -262,21 +283,98 @@ export function OrderHistory() {
 
                     {/* Order Summary */}
                     <div className="border-t pt-4">
-                      <div className="flex justify-between text-sm mb-2">
-                        <span className="text-muted-foreground">Subtotal</span>
-                        <span>R{selectedOrder.totalAmount.toFixed(2)}</span>
-                      </div>
-                      <div className="flex justify-between text-sm mb-2">
-                        <span className="text-muted-foreground">Shipping</span>
-                        <span>Free</span>
-                      </div>
-                      <div className="flex justify-between font-medium text-lg pt-2 border-t">
-                        <span>Total</span>
-                        <span style={{ color: 'var(--jits-pink)' }}>
-                          R{selectedOrder.totalAmount.toFixed(2)}
-                        </span>
-                      </div>
+                      {(() => {
+                        // Calculate values - VAT is included in item prices
+                        const shippingCost = selectedOrder.shippingCost || 0;
+                        const totalWithShipping = selectedOrder.totalAmount;
+                        const itemsTotal = totalWithShipping - shippingCost;
+                        const vatRate = storeSettings?.vatEnabled ? (storeSettings.vatRate / 100) : 0;
+                        const subtotalExclVat = vatRate > 0 ? itemsTotal / (1 + vatRate) : itemsTotal;
+                        const vatAmount = itemsTotal - subtotalExclVat;
+
+                        return (
+                          <>
+                            <div className="flex justify-between text-sm mb-2">
+                              <span className="text-muted-foreground">
+                                Subtotal {vatRate > 0 ? '(excl. VAT)' : ''}
+                              </span>
+                              <span>R{subtotalExclVat.toFixed(2)}</span>
+                            </div>
+                            {vatRate > 0 && (
+                              <div className="flex justify-between text-sm mb-2">
+                                <span className="text-muted-foreground">VAT ({storeSettings?.vatRate}%)</span>
+                                <span>R{vatAmount.toFixed(2)}</span>
+                              </div>
+                            )}
+                            <div className="flex justify-between text-sm mb-2">
+                              <span className="text-muted-foreground">
+                                Shipping
+                                {selectedOrder.serviceLevelName && (
+                                  <span className="text-xs ml-1">({selectedOrder.serviceLevelName})</span>
+                                )}
+                              </span>
+                              {shippingCost > 0 ? (
+                                <span>R{shippingCost.toFixed(2)}</span>
+                              ) : (
+                                <span className="text-green-600">Free</span>
+                              )}
+                            </div>
+                            <div className="flex justify-between font-medium text-lg pt-2 border-t">
+                              <span>Total</span>
+                              <span style={{ color: 'var(--jits-pink)' }}>
+                                R{totalWithShipping.toFixed(2)}
+                              </span>
+                            </div>
+                          </>
+                        );
+                      })()}
                     </div>
+
+                    {/* Shipping & Tracking Info */}
+                    {(selectedOrder.trackingNumber || selectedOrder.carrierName) && (
+                      <div className="border-t pt-4">
+                        <h3 className="font-medium mb-3 flex items-center gap-2">
+                          <Truck className="w-4 h-4" />
+                          Shipping Information
+                        </h3>
+                        <div className="space-y-2 text-sm">
+                          {selectedOrder.carrierName && (
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Carrier</span>
+                              <span>{selectedOrder.carrierName}</span>
+                            </div>
+                          )}
+                          {selectedOrder.serviceLevelName && (
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Service</span>
+                              <span>{selectedOrder.serviceLevelName}</span>
+                            </div>
+                          )}
+                          {selectedOrder.trackingNumber && (
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Tracking #</span>
+                              <span className="font-mono">{selectedOrder.trackingNumber}</span>
+                            </div>
+                          )}
+                          {selectedOrder.estimatedDelivery && (
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Est. Delivery</span>
+                              <span>{formatDate(selectedOrder.estimatedDelivery)}</span>
+                            </div>
+                          )}
+                        </div>
+                        {selectedOrder.trackingNumber && (
+                          <button
+                            type="button"
+                            onClick={viewTracking}
+                            className="w-full mt-4 py-2 rounded-lg border border-primary text-primary hover:bg-primary/10 transition-colors flex items-center justify-center gap-2"
+                          >
+                            <MapPin className="w-4 h-4" />
+                            Track Order
+                          </button>
+                        )}
+                      </div>
+                    )}
 
                     {/* Order Date */}
                     <div className="text-sm text-muted-foreground">
@@ -284,6 +382,29 @@ export function OrderHistory() {
                     </div>
                   </div>
                 </>
+              )}
+
+              {/* Tracking Modal */}
+              {showTracking && selectedOrder && (
+                <div className="absolute inset-0 bg-card rounded-lg p-6 overflow-y-auto">
+                  <div className="flex items-center justify-between mb-6">
+                    <h2 className="text-xl font-semibold">Order Tracking</h2>
+                    <button
+                      type="button"
+                      onClick={() => setShowTracking(false)}
+                      className="p-2 hover:bg-muted rounded-lg transition-colors"
+                      title="Close tracking"
+                      aria-label="Close tracking"
+                    >
+                      <XCircle className="w-5 h-5" />
+                    </button>
+                  </div>
+                  <OrderTracking
+                    orderId={selectedOrder.id}
+                    trackingNumber={selectedOrder.trackingNumber}
+                    onClose={() => setShowTracking(false)}
+                  />
+                </div>
               )}
             </div>
           </div>

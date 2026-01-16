@@ -1,8 +1,8 @@
 import { X, Package, CreditCard, Truck, MapPin, User, Mail, Clock, CheckCircle, XCircle, Copy, Download, RotateCcw, Loader2 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { pdf } from '@react-pdf/renderer';
-import { Order, apiClient, RefundRequest } from '../services/api';
+import { Order, apiClient, RefundRequest, StoreSettings } from '../services/api';
 import { InvoicePDF } from './InvoicePDF';
 import JitsLogoImage from '../assets/Jits_icon.png';
 import {
@@ -26,6 +26,20 @@ export function OrderDetails({ order: initialOrder, onClose, onOrderUpdate }: Or
   const [order, setOrder] = useState(initialOrder);
   const [trackingNumber, setTrackingNumber] = useState(order.trackingNumber || '');
   const [showTrackingInput, setShowTrackingInput] = useState(false);
+  const [storeSettings, setStoreSettings] = useState<StoreSettings | null>(null);
+
+  // Fetch store settings for VAT calculation
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        const settings = await apiClient.getAdminSettings();
+        setStoreSettings(settings);
+      } catch (error) {
+        console.error('Failed to load store settings:', error);
+      }
+    };
+    fetchSettings();
+  }, []);
 
   // Loading states
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
@@ -414,12 +428,51 @@ export function OrderDetails({ order: initialOrder, onClose, onOrderUpdate }: Or
                 ))}
               </div>
 
-              {/* Order Total */}
-              <div className="mt-6 pt-4 border-t">
-                <div className="flex justify-between text-lg font-bold">
-                  <span>Grand Total</span>
-                  <span style={{ color: 'var(--jits-pink)' }}>R{order.totalAmount.toFixed(2)}</span>
-                </div>
+              {/* Order Summary with VAT */}
+              <div className="mt-6 pt-4 border-t space-y-2">
+                {(() => {
+                  // Calculate values - VAT is included in item prices
+                  const shippingCost = order.shippingCost || 0;
+                  const totalWithShipping = order.totalAmount;
+                  const itemsTotal = totalWithShipping - shippingCost;
+                  const vatRate = storeSettings?.vatEnabled ? (storeSettings.vatRate / 100) : 0;
+                  const subtotalExclVat = vatRate > 0 ? itemsTotal / (1 + vatRate) : itemsTotal;
+                  const vatAmount = itemsTotal - subtotalExclVat;
+
+                  return (
+                    <>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">
+                          Subtotal {vatRate > 0 ? '(excl. VAT)' : ''}
+                        </span>
+                        <span>R{subtotalExclVat.toFixed(2)}</span>
+                      </div>
+                      {vatRate > 0 && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">VAT ({storeSettings?.vatRate}%)</span>
+                          <span>R{vatAmount.toFixed(2)}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">
+                          Shipping
+                          {order.serviceLevelName && (
+                            <span className="text-xs ml-1">({order.serviceLevelName})</span>
+                          )}
+                        </span>
+                        {shippingCost > 0 ? (
+                          <span>R{shippingCost.toFixed(2)}</span>
+                        ) : (
+                          <span className="text-green-600">Free</span>
+                        )}
+                      </div>
+                      <div className="flex justify-between text-lg font-bold pt-2 border-t">
+                        <span>Grand Total</span>
+                        <span style={{ color: 'var(--jits-pink)' }}>R{totalWithShipping.toFixed(2)}</span>
+                      </div>
+                    </>
+                  );
+                })()}
               </div>
             </div>
 

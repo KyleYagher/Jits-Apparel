@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../context/useAuth';
 import Papa from 'papaparse';
-import { apiClient, ProductUploadDto, Product, CarouselItem, CreateCarouselItemDto, UpdateCarouselItemDto, ReorderCarouselItemDto, OrderSummary, Order } from '../services/api';
+import { apiClient, ProductUploadDto, Product, CarouselItem, CreateCarouselItemDto, UpdateCarouselItemDto, ReorderCarouselItemDto, OrderSummary, Order, ShippingRate, CreateShipmentRequest, TrackingResponse, StoreSettings } from '../services/api';
 import { toast } from 'sonner';
 import {
   Package,
@@ -11,7 +11,6 @@ import {
   Truck,
   ShoppingCart,
   Users,
-  AlertTriangle,
   BarChart3,
   FileText,
   CheckCircle,
@@ -21,7 +20,14 @@ import {
   Edit,
   Eye,
   Star,
-  GripVertical
+  GripVertical,
+  RefreshCw,
+  ExternalLink,
+  MapPin,
+  Loader2,
+  Send,
+  Ban,
+  Settings
 } from 'lucide-react';
 import { ProductDetail } from '../components/ProductDetail';
 import { EditProduct } from '../components/EditProduct';
@@ -54,14 +60,24 @@ const categoryData = [
 ];
 
 
-const deliveryIntegrations = [
-  { name: 'Aramex', status: 'active', lastSync: '2 mins ago', orders: 45 },
-  { name: 'The Courier Guy', status: 'active', lastSync: '5 mins ago', orders: 32 },
-  { name: 'Pargo', status: 'warning', lastSync: '2 hours ago', orders: 18 },
-  { name: 'PostNet', status: 'error', lastSync: 'Failed', orders: 0 },
-];
+// Delivery tab types
+interface PendingShipment {
+  order: Order;
+  // Only used as fallback if customer's selection is missing
+  rates: ShippingRate[];
+  selectedRate?: ShippingRate;
+  isLoadingRates: boolean;
+  // Whether to show rate selection (only when customer selection is missing)
+  needsRateSelection: boolean;
+}
 
-type TabType = 'overview' | 'products' | 'carousel' | 'orders' | 'delivery' | 'analytics';
+interface ActiveShipment {
+  order: Order;
+  tracking?: TrackingResponse;
+  isLoadingTracking: boolean;
+}
+
+type TabType = 'overview' | 'products' | 'carousel' | 'orders' | 'delivery' | 'analytics' | 'settings';
 
 // Sortable Carousel Item Component
 interface SortableCarouselItemProps {
@@ -222,6 +238,19 @@ export function Dashboard() {
   const [selectedCarouselItem, setSelectedCarouselItem] = useState<CarouselItem | null>(null);
   const [showAddCarouselItem, setShowAddCarouselItem] = useState(false);
   const [showEditCarouselItem, setShowEditCarouselItem] = useState(false);
+
+  // Delivery state
+  const [pendingShipments, setPendingShipments] = useState<PendingShipment[]>([]);
+  const [activeShipments, setActiveShipments] = useState<ActiveShipment[]>([]);
+  const [loadingDelivery, setLoadingDelivery] = useState(false);
+  const [integrationStatus, setIntegrationStatus] = useState<'checking' | 'active' | 'error'>('checking');
+  const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
+  const [creatingShipment, setCreatingShipment] = useState<number | null>(null);
+
+  // Settings state
+  const [storeSettings, setStoreSettings] = useState<StoreSettings | null>(null);
+  const [loadingSettings, setLoadingSettings] = useState(false);
+  const [savingSettings, setSavingSettings] = useState(false);
 
   // Filter products based on search term
   const filteredProducts = products.filter((product) => {
@@ -467,27 +496,218 @@ export function Dashboard() {
     }
   };
 
-  const handleOrderStatusUpdate = async (orderId: number, newStatus: string) => {
-    try {
-      toast.loading('Updating order status...', { id: 'order-status' });
-      await apiClient.updateOrderStatus(orderId, { status: newStatus });
-      toast.success('Order status updated!', { id: 'order-status' });
-      fetchOrders();
-      if (selectedOrder && selectedOrder.id === orderId) {
-        const updatedOrder = await apiClient.getOrder(orderId);
-        setSelectedOrder(updatedOrder);
-      }
-    } catch (error) {
-      toast.error(`Failed to update status: ${error instanceof Error ? error.message : 'Unknown error'}`, { id: 'order-status' });
-    }
-  };
-
   // Fetch orders when orders or overview tab is active
   useEffect(() => {
     if (activeTab === 'orders' || activeTab === 'overview') {
       fetchOrders();
     }
   }, [activeTab, orderFilters.status, orderFilters.search, ordersPagination.page]);
+
+  // Delivery handlers
+  const fetchDeliveryData = async () => {
+    try {
+      setLoadingDelivery(true);
+      setIntegrationStatus('checking');
+
+      // Get all orders to categorize them
+      const response = await apiClient.getAllOrders({ pageSize: 100 });
+      const allOrders = response.items;
+
+      // Separate into pending (needs shipment) and active (has tracking)
+      const pending: PendingShipment[] = [];
+      const active: ActiveShipment[] = [];
+
+      for (const orderSummary of allOrders) {
+        // Get full order details
+        const order = await apiClient.getOrder(orderSummary.id);
+
+        if (order.status === 'Processing' && !order.trackingNumber) {
+          // Order is processing but no shipment created yet
+          // Check if customer already selected a shipping option during checkout
+          const hasCustomerSelection = !!(order.serviceLevelCode && order.serviceLevelName);
+
+          pending.push({
+            order,
+            rates: [],
+            isLoadingRates: false,
+            needsRateSelection: !hasCustomerSelection
+          });
+        } else if (order.trackingNumber && (order.status === 'Shipped' || order.status === 'Processing')) {
+          // Order has been shipped - fetch tracking
+          active.push({
+            order,
+            isLoadingTracking: false
+          });
+        }
+      }
+
+      setPendingShipments(pending);
+      setActiveShipments(active);
+      setIntegrationStatus('active');
+      setLastSyncTime(new Date());
+    } catch (error) {
+      console.error('Error fetching delivery data:', error);
+      setIntegrationStatus('error');
+      toast.error(`Failed to load delivery data: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setLoadingDelivery(false);
+    }
+  };
+
+  const fetchRatesForOrder = async (orderId: number) => {
+    setPendingShipments(prev => prev.map(ps =>
+      ps.order.id === orderId ? { ...ps, isLoadingRates: true } : ps
+    ));
+
+    try {
+      const rates = await apiClient.getShippingRatesForOrder(orderId);
+      setPendingShipments(prev => prev.map(ps =>
+        ps.order.id === orderId
+          ? { ...ps, rates: rates.rates, isLoadingRates: false, selectedRate: rates.rates[0] }
+          : ps
+      ));
+    } catch (error) {
+      console.error('Error fetching rates:', error);
+      toast.error(`Failed to get shipping rates: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      setPendingShipments(prev => prev.map(ps =>
+        ps.order.id === orderId ? { ...ps, isLoadingRates: false } : ps
+      ));
+    }
+  };
+
+  const selectRate = (orderId: number, rate: ShippingRate) => {
+    setPendingShipments(prev => prev.map(ps =>
+      ps.order.id === orderId ? { ...ps, selectedRate: rate } : ps
+    ));
+  };
+
+  const createShipmentForOrder = async (orderId: number, serviceLevelCode: string) => {
+    setCreatingShipment(orderId);
+    try {
+      toast.loading('Creating shipment...', { id: `shipment-${orderId}` });
+
+      const request: CreateShipmentRequest = {
+        orderId,
+        serviceLevelCode,
+        parcels: [
+          {
+            lengthCm: 30,
+            widthCm: 25,
+            heightCm: 5,
+            weightKg: 0.5,
+            description: 'Apparel'
+          }
+        ]
+      };
+
+      const shipment = await apiClient.createShipment(request);
+      toast.success(`Shipment created! Tracking: ${shipment.trackingReference}`, { id: `shipment-${orderId}` });
+
+      // Refresh delivery data
+      await fetchDeliveryData();
+    } catch (error) {
+      console.error('Error creating shipment:', error);
+      toast.error(`Failed to create shipment: ${error instanceof Error ? error.message : 'Unknown error'}`, { id: `shipment-${orderId}` });
+    } finally {
+      setCreatingShipment(null);
+    }
+  };
+
+  const fetchTrackingForOrder = async (orderId: number) => {
+    setActiveShipments(prev => prev.map(as =>
+      as.order.id === orderId ? { ...as, isLoadingTracking: true } : as
+    ));
+
+    try {
+      const tracking = await apiClient.getOrderTracking(orderId);
+      setActiveShipments(prev => prev.map(as =>
+        as.order.id === orderId ? { ...as, tracking, isLoadingTracking: false } : as
+      ));
+    } catch (error) {
+      console.error('Error fetching tracking:', error);
+      toast.error(`Failed to get tracking: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      setActiveShipments(prev => prev.map(as =>
+        as.order.id === orderId ? { ...as, isLoadingTracking: false } : as
+      ));
+    }
+  };
+
+  const openLabelUrl = async (orderId: number) => {
+    try {
+      const result = await apiClient.getShipmentLabel(orderId);
+      window.open(result.url, '_blank');
+    } catch (error) {
+      toast.error(`Failed to get label: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
+  const cancelShipmentForOrder = async (orderId: number) => {
+    if (!confirm('Are you sure you want to cancel this shipment?')) return;
+
+    try {
+      toast.loading('Cancelling shipment...', { id: `cancel-${orderId}` });
+      await apiClient.cancelShipment(orderId);
+      toast.success('Shipment cancelled', { id: `cancel-${orderId}` });
+      await fetchDeliveryData();
+    } catch (error) {
+      toast.error(`Failed to cancel: ${error instanceof Error ? error.message : 'Unknown error'}`, { id: `cancel-${orderId}` });
+    }
+  };
+
+  // Fetch delivery data when delivery tab is active
+  useEffect(() => {
+    if (activeTab === 'delivery') {
+      fetchDeliveryData();
+    }
+  }, [activeTab]);
+
+  // Fetch settings when settings tab is active
+  const fetchSettings = async () => {
+    try {
+      setLoadingSettings(true);
+      const settings = await apiClient.getAdminSettings();
+      setStoreSettings(settings);
+    } catch (error) {
+      toast.error(`Failed to load settings: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setLoadingSettings(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'settings') {
+      fetchSettings();
+    }
+  }, [activeTab]);
+
+  const handleSaveSettings = async () => {
+    if (!storeSettings) return;
+
+    try {
+      setSavingSettings(true);
+      const updated = await apiClient.updateSettings({
+        vatRate: storeSettings.vatRate,
+        vatEnabled: storeSettings.vatEnabled,
+        vatNumber: storeSettings.vatNumber,
+        storeName: storeSettings.storeName,
+        storeEmail: storeSettings.storeEmail,
+        storePhone: storeSettings.storePhone,
+        storeAddressLine1: storeSettings.storeAddressLine1,
+        storeAddressLine2: storeSettings.storeAddressLine2,
+        storeCity: storeSettings.storeCity,
+        storeProvince: storeSettings.storeProvince,
+        storePostalCode: storeSettings.storePostalCode,
+        storeCountry: storeSettings.storeCountry,
+        freeShippingThreshold: storeSettings.freeShippingThreshold,
+      });
+      setStoreSettings(updated);
+      toast.success('Settings saved successfully');
+    } catch (error) {
+      toast.error(`Failed to save settings: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setSavingSettings(false);
+    }
+  };
 
   const handleProductAdd = async (newProductData: NewProductData) => {
     try {
@@ -541,16 +761,8 @@ export function Dashboard() {
     { id: 'orders' as TabType, label: 'Orders', icon: ShoppingCart },
     { id: 'delivery' as TabType, label: 'Delivery', icon: Truck },
     { id: 'analytics' as TabType, label: 'Analytics', icon: TrendingUp },
+    { id: 'settings' as TabType, label: 'Settings', icon: Settings },
   ];
-
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'active': return <CheckCircle className="h-5 w-5 text-green-500" />;
-      case 'warning': return <AlertTriangle className="h-5 w-5 text-yellow-500" />;
-      case 'error': return <XCircle className="h-5 w-5 text-red-500" />;
-      default: return <Clock className="h-5 w-5 text-gray-500" />;
-    }
-  };
 
   const getOrderStatusColor = (status: string) => {
     switch (status) {
@@ -1134,46 +1346,363 @@ export function Dashboard() {
         {/* Delivery Tab */}
         {activeTab === 'delivery' && (
           <div className="space-y-6">
+            {/* Integration Status Card */}
             <div className="bg-card border rounded-lg p-6">
-              <h3 className="text-lg font-semibold mb-4">Delivery Integration Status</h3>
-              <p className="text-sm text-muted-foreground mb-6">
-                Monitor the status of your delivery partner integrations
-              </p>
-
-              <div className="space-y-4">
-                {deliveryIntegrations.map((integration, index) => (
-                  <div key={index} className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors">
-                    <div className="flex items-center gap-4">
-                      {getStatusIcon(integration.status)}
-                      <div>
-                        <h4 className="font-semibold">{integration.name}</h4>
-                        <p className="text-sm text-muted-foreground">
-                          Last sync: {integration.lastSync}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-semibold">{integration.orders} orders</p>
-                      <button className="text-sm text-pink-600 dark:text-pink-400 hover:underline">
-                        View Logs
-                      </button>
-                    </div>
-                  </div>
-                ))}
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="text-lg font-semibold">Ship Logic Integration</h3>
+                  <p className="text-sm text-muted-foreground">
+                    The Courier Guy API - Manage shipments and tracking
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={fetchDeliveryData}
+                  disabled={loadingDelivery}
+                  className="flex items-center gap-2 px-4 py-2 border rounded-lg hover:bg-muted transition-colors disabled:opacity-50"
+                >
+                  <RefreshCw className={`h-4 w-4 ${loadingDelivery ? 'animate-spin' : ''}`} />
+                  Refresh
+                </button>
               </div>
 
-              <div className="mt-6 p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
-                <div className="flex gap-3">
-                  <AlertTriangle className="h-5 w-5 text-yellow-600 dark:text-yellow-400 shrink-0 mt-0.5" />
+              <div className="flex items-center gap-4 p-4 border rounded-lg">
+                <div className="flex items-center gap-3">
+                  {integrationStatus === 'checking' && (
+                    <Loader2 className="h-5 w-5 animate-spin text-blue-500" />
+                  )}
+                  {integrationStatus === 'active' && (
+                    <CheckCircle className="h-5 w-5 text-green-500" />
+                  )}
+                  {integrationStatus === 'error' && (
+                    <XCircle className="h-5 w-5 text-red-500" />
+                  )}
                   <div>
-                    <h4 className="font-semibold text-yellow-800 dark:text-yellow-300">Integration Issues Detected</h4>
-                    <p className="text-sm text-yellow-700 dark:text-yellow-400 mt-1">
-                      PostNet integration is currently experiencing connection issues. Last successful sync was 4 hours ago.
+                    <h4 className="font-semibold">The Courier Guy</h4>
+                    <p className="text-sm text-muted-foreground">
+                      {integrationStatus === 'checking' && 'Checking connection...'}
+                      {integrationStatus === 'active' && 'Connected and ready'}
+                      {integrationStatus === 'error' && 'Connection failed'}
                     </p>
-                    <button className="text-sm text-yellow-800 dark:text-yellow-300 hover:underline mt-2">
-                      Retry Connection →
-                    </button>
                   </div>
+                </div>
+                <div className="ml-auto text-right text-sm">
+                  {lastSyncTime && (
+                    <p className="text-muted-foreground">
+                      Last sync: {lastSyncTime.toLocaleTimeString()}
+                    </p>
+                  )}
+                  <p className="font-medium">
+                    {pendingShipments.length} pending · {activeShipments.length} active
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Loading State */}
+            {loadingDelivery && (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              </div>
+            )}
+
+            {/* Pending Shipments - Orders that need shipping */}
+            {!loadingDelivery && pendingShipments.length > 0 && (
+              <div className="bg-card border rounded-lg p-6">
+                <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                  <Clock className="h-5 w-5 text-yellow-500" />
+                  Pending Shipments ({pendingShipments.length})
+                </h3>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Orders ready to be shipped with customer-selected delivery options
+                </p>
+
+                <div className="space-y-4">
+                  {pendingShipments.map((ps) => (
+                    <div key={ps.order.id} className="border rounded-lg p-4">
+                      <div className="flex items-start justify-between mb-3">
+                        <div>
+                          <p className="font-mono text-sm text-muted-foreground">{ps.order.orderNumber}</p>
+                          <p className="font-semibold">{ps.order.customerName}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {ps.order.shippingAddress?.city}, {ps.order.shippingAddress?.province}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-semibold">R{ps.order.totalAmount.toFixed(2)}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {ps.order.items?.length || 0} items
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Customer's Selected Shipping - Direct shipment creation */}
+                      {!ps.needsRateSelection && ps.order.serviceLevelCode && (
+                        <div className="space-y-3">
+                          {/* Show customer's selection */}
+                          <div className="p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <CheckCircle className="h-4 w-4 text-green-600" />
+                                <div>
+                                  <p className="font-medium text-sm">Customer selected:</p>
+                                  <p className="text-green-700 dark:text-green-400">{ps.order.serviceLevelName}</p>
+                                </div>
+                              </div>
+                              {ps.order.shippingCost !== undefined && (
+                                <p className="font-semibold">R{ps.order.shippingCost.toFixed(2)}</p>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Create Shipment Button */}
+                          <button
+                            type="button"
+                            onClick={() => createShipmentForOrder(ps.order.id, ps.order.serviceLevelCode!)}
+                            disabled={creatingShipment === ps.order.id}
+                            className="w-full py-2 rounded-lg text-white transition-all hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2"
+                            style={{
+                              background: 'linear-gradient(90deg, var(--jits-pink) 0%, var(--jits-orange) 100%)'
+                            }}
+                          >
+                            {creatingShipment === ps.order.id ? (
+                              <>
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                Creating Shipment...
+                              </>
+                            ) : (
+                              <>
+                                <Send className="h-4 w-4" />
+                                Create Shipment
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Fallback: Rate Selection needed (no customer selection) */}
+                      {ps.needsRateSelection && (
+                        <>
+                          {/* Warning that no shipping was selected */}
+                          <div className="p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg mb-3">
+                            <p className="text-sm text-yellow-700 dark:text-yellow-400">
+                              No shipping option was selected at checkout. Please select a rate below.
+                            </p>
+                          </div>
+
+                          {/* Get Rates Button */}
+                          {ps.rates.length === 0 && (
+                            <button
+                              type="button"
+                              onClick={() => fetchRatesForOrder(ps.order.id)}
+                              disabled={ps.isLoadingRates}
+                              className="w-full py-2 border rounded-lg hover:bg-muted transition-colors flex items-center justify-center gap-2"
+                            >
+                              {ps.isLoadingRates ? (
+                                <>
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                  Loading rates...
+                                </>
+                              ) : (
+                                <>
+                                  <Truck className="h-4 w-4" />
+                                  Get Shipping Rates
+                                </>
+                              )}
+                            </button>
+                          )}
+
+                          {/* Rate Selection */}
+                          {ps.rates.length > 0 && (
+                            <div className="space-y-3">
+                              <p className="text-sm font-medium">Select shipping service:</p>
+                              <div className="space-y-2">
+                                {ps.rates.map((rate) => (
+                                  <label
+                                    key={rate.serviceLevelCode}
+                                    className={`flex items-center justify-between p-3 border rounded-lg cursor-pointer transition-colors ${
+                                      ps.selectedRate?.serviceLevelCode === rate.serviceLevelCode
+                                        ? 'border-pink-500 bg-pink-50 dark:bg-pink-900/20'
+                                        : 'hover:bg-muted'
+                                    }`}
+                                  >
+                                    <div className="flex items-center gap-3">
+                                      <input
+                                        type="radio"
+                                        name={`rate-${ps.order.id}`}
+                                        checked={ps.selectedRate?.serviceLevelCode === rate.serviceLevelCode}
+                                        onChange={() => selectRate(ps.order.id, rate)}
+                                        className="text-pink-500"
+                                      />
+                                      <div>
+                                        <p className="font-medium">{rate.serviceLevelName}</p>
+                                        <p className="text-sm text-muted-foreground">{rate.deliveryEstimate}</p>
+                                      </div>
+                                    </div>
+                                    <p className="font-semibold">R{rate.totalRate.toFixed(2)}</p>
+                                  </label>
+                                ))}
+                              </div>
+
+                              {/* Create Shipment Button */}
+                              <button
+                                type="button"
+                                onClick={() => ps.selectedRate && createShipmentForOrder(ps.order.id, ps.selectedRate.serviceLevelCode)}
+                                disabled={!ps.selectedRate || creatingShipment === ps.order.id}
+                                className="w-full py-2 rounded-lg text-white transition-all hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2"
+                                style={{
+                                  background: 'linear-gradient(90deg, var(--jits-pink) 0%, var(--jits-orange) 100%)'
+                                }}
+                              >
+                                {creatingShipment === ps.order.id ? (
+                                  <>
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                    Creating Shipment...
+                                  </>
+                                ) : (
+                                  <>
+                                    <Send className="h-4 w-4" />
+                                    Create Shipment
+                                  </>
+                                )}
+                              </button>
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Active Shipments - Orders with tracking */}
+            {!loadingDelivery && activeShipments.length > 0 && (
+              <div className="bg-card border rounded-lg p-6">
+                <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                  <Truck className="h-5 w-5 text-blue-500" />
+                  Active Shipments ({activeShipments.length})
+                </h3>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Orders in transit - track and manage shipments
+                </p>
+
+                <div className="space-y-4">
+                  {activeShipments.map((as) => (
+                    <div key={as.order.id} className="border rounded-lg p-4">
+                      <div className="flex items-start justify-between mb-3">
+                        <div>
+                          <p className="font-mono text-sm text-muted-foreground">{as.order.orderNumber}</p>
+                          <p className="font-semibold">{as.order.customerName}</p>
+                          {as.order.trackingNumber && (
+                            <p className="text-sm font-mono text-muted-foreground">
+                              Tracking: {as.order.trackingNumber}
+                            </p>
+                          )}
+                        </div>
+                        <div className="text-right">
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                            as.order.status === 'Delivered'
+                              ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
+                              : 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400'
+                          }`}>
+                            {as.order.status}
+                          </span>
+                          {as.order.carrierName && (
+                            <p className="text-sm text-muted-foreground mt-1">{as.order.carrierName}</p>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Tracking Info */}
+                      {as.tracking && (
+                        <div className="bg-muted/50 rounded-lg p-3 mb-3">
+                          <div className="flex items-center gap-2 mb-2">
+                            <MapPin className="h-4 w-4 text-muted-foreground" />
+                            <span className="font-medium">{as.tracking.statusDescription}</span>
+                          </div>
+                          {as.tracking.events.length > 0 && (
+                            <p className="text-sm text-muted-foreground">
+                              Last update: {new Date(as.tracking.events[0].eventDate).toLocaleString()}
+                              {as.tracking.events[0].location && ` - ${as.tracking.events[0].location}`}
+                            </p>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Action Buttons */}
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => fetchTrackingForOrder(as.order.id)}
+                          disabled={as.isLoadingTracking}
+                          className="flex-1 py-2 border rounded-lg hover:bg-muted transition-colors flex items-center justify-center gap-2"
+                        >
+                          {as.isLoadingTracking ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <RefreshCw className="h-4 w-4" />
+                          )}
+                          Update Tracking
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => openLabelUrl(as.order.id)}
+                          className="py-2 px-4 border rounded-lg hover:bg-muted transition-colors flex items-center gap-2"
+                        >
+                          <ExternalLink className="h-4 w-4" />
+                          Label
+                        </button>
+                        {as.order.status !== 'Delivered' && (
+                          <button
+                            type="button"
+                            onClick={() => cancelShipmentForOrder(as.order.id)}
+                            className="py-2 px-4 border border-red-200 text-red-600 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors flex items-center gap-2"
+                          >
+                            <Ban className="h-4 w-4" />
+                            Cancel
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Empty State */}
+            {!loadingDelivery && pendingShipments.length === 0 && activeShipments.length === 0 && (
+              <div className="bg-card border rounded-lg p-12 text-center">
+                <Truck className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                <h3 className="text-lg font-semibold mb-2">No Shipments</h3>
+                <p className="text-muted-foreground mb-4">
+                  Orders with "Processing" status will appear here for shipment creation.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('orders')}
+                  className="text-pink-600 dark:text-pink-400 hover:underline"
+                >
+                  View All Orders →
+                </button>
+              </div>
+            )}
+
+            {/* Integration Info */}
+            <div className="bg-card border rounded-lg p-6">
+              <h3 className="text-lg font-semibold mb-4">Integration Details</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="p-4 bg-muted/50 rounded-lg">
+                  <h4 className="font-medium mb-1">API Provider</h4>
+                  <p className="text-sm text-muted-foreground">Ship Logic (The Courier Guy)</p>
+                </div>
+                <div className="p-4 bg-muted/50 rounded-lg">
+                  <h4 className="font-medium mb-1">Environment</h4>
+                  <p className="text-sm text-muted-foreground">Sandbox (Development)</p>
+                </div>
+                <div className="p-4 bg-muted/50 rounded-lg">
+                  <h4 className="font-medium mb-1">Features</h4>
+                  <p className="text-sm text-muted-foreground">Rates, Shipments, Tracking, Labels</p>
                 </div>
               </div>
             </div>
@@ -1260,6 +1789,245 @@ export function Dashboard() {
             </div>
           </div>
         )}
+
+        {/* Settings Tab */}
+        {activeTab === 'settings' && (
+          <div className="space-y-6">
+            {loadingSettings ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              </div>
+            ) : storeSettings ? (
+              <>
+                {/* VAT Settings */}
+                <div className="bg-card border rounded-lg p-6">
+                  <h3 className="text-lg font-semibold mb-4">VAT Settings</h3>
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <label className="font-medium">Enable VAT</label>
+                        <p className="text-sm text-muted-foreground">Calculate and display VAT on orders and invoices</p>
+                      </div>
+                      <button
+                        type="button"
+                        title="Toggle VAT"
+                        onClick={() => setStoreSettings({ ...storeSettings, vatEnabled: !storeSettings.vatEnabled })}
+                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                          storeSettings.vatEnabled ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'
+                        }`}
+                      >
+                        <span
+                          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                            storeSettings.vatEnabled ? 'translate-x-6' : 'translate-x-1'
+                          }`}
+                        />
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium mb-1">VAT Rate (%)</label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="0.1"
+                          value={storeSettings.vatRate}
+                          onChange={(e) => setStoreSettings({ ...storeSettings, vatRate: parseFloat(e.target.value) || 0 })}
+                          className="w-full px-3 py-2 border rounded-md bg-background"
+                          placeholder="15"
+                        />
+                        <p className="text-xs text-muted-foreground mt-1">South African VAT is 15%</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium mb-1">VAT Number</label>
+                        <input
+                          type="text"
+                          value={storeSettings.vatNumber}
+                          onChange={(e) => setStoreSettings({ ...storeSettings, vatNumber: e.target.value })}
+                          className="w-full px-3 py-2 border rounded-md bg-background"
+                          placeholder="4XXXXXXXXXX"
+                        />
+                        <p className="text-xs text-muted-foreground mt-1">Displayed on invoices</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Store Information */}
+                <div className="bg-card border rounded-lg p-6">
+                  <h3 className="text-lg font-semibold mb-4">Store Information</h3>
+                  <p className="text-sm text-muted-foreground mb-4">This information appears on invoices and order confirmations.</p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Store Name</label>
+                      <input
+                        type="text"
+                        value={storeSettings.storeName}
+                        onChange={(e) => setStoreSettings({ ...storeSettings, storeName: e.target.value })}
+                        className="w-full px-3 py-2 border rounded-md bg-background"
+                        placeholder="Jits Apparel"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Store Email</label>
+                      <input
+                        type="email"
+                        value={storeSettings.storeEmail}
+                        onChange={(e) => setStoreSettings({ ...storeSettings, storeEmail: e.target.value })}
+                        className="w-full px-3 py-2 border rounded-md bg-background"
+                        placeholder="info@jitsapparel.com"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Store Phone</label>
+                      <input
+                        type="tel"
+                        value={storeSettings.storePhone}
+                        onChange={(e) => setStoreSettings({ ...storeSettings, storePhone: e.target.value })}
+                        className="w-full px-3 py-2 border rounded-md bg-background"
+                        placeholder="+27 XX XXX XXXX"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Store Address */}
+                <div className="bg-card border rounded-lg p-6">
+                  <h3 className="text-lg font-semibold mb-4">Store Address</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium mb-1">Address Line 1</label>
+                      <input
+                        type="text"
+                        value={storeSettings.storeAddressLine1}
+                        onChange={(e) => setStoreSettings({ ...storeSettings, storeAddressLine1: e.target.value })}
+                        className="w-full px-3 py-2 border rounded-md bg-background"
+                        placeholder="Street address"
+                      />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium mb-1">Address Line 2</label>
+                      <input
+                        type="text"
+                        value={storeSettings.storeAddressLine2}
+                        onChange={(e) => setStoreSettings({ ...storeSettings, storeAddressLine2: e.target.value })}
+                        className="w-full px-3 py-2 border rounded-md bg-background"
+                        placeholder="Suite, floor, etc. (optional)"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">City</label>
+                      <input
+                        type="text"
+                        value={storeSettings.storeCity}
+                        onChange={(e) => setStoreSettings({ ...storeSettings, storeCity: e.target.value })}
+                        className="w-full px-3 py-2 border rounded-md bg-background"
+                        placeholder="Johannesburg"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Province</label>
+                      <select
+                        title="Province"
+                        value={storeSettings.storeProvince}
+                        onChange={(e) => setStoreSettings({ ...storeSettings, storeProvince: e.target.value })}
+                        className="w-full px-3 py-2 border rounded-md bg-background"
+                      >
+                        <option value="">Select Province</option>
+                        <option value="Gauteng">Gauteng</option>
+                        <option value="Western Cape">Western Cape</option>
+                        <option value="KwaZulu-Natal">KwaZulu-Natal</option>
+                        <option value="Eastern Cape">Eastern Cape</option>
+                        <option value="Free State">Free State</option>
+                        <option value="Limpopo">Limpopo</option>
+                        <option value="Mpumalanga">Mpumalanga</option>
+                        <option value="Northern Cape">Northern Cape</option>
+                        <option value="North West">North West</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Postal Code</label>
+                      <input
+                        type="text"
+                        value={storeSettings.storePostalCode}
+                        onChange={(e) => setStoreSettings({ ...storeSettings, storePostalCode: e.target.value })}
+                        className="w-full px-3 py-2 border rounded-md bg-background"
+                        placeholder="0000"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Country</label>
+                      <input
+                        type="text"
+                        value={storeSettings.storeCountry}
+                        onChange={(e) => setStoreSettings({ ...storeSettings, storeCountry: e.target.value })}
+                        className="w-full px-3 py-2 border rounded-md bg-background"
+                        placeholder="South Africa"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Shipping Settings */}
+                <div className="bg-card border rounded-lg p-6">
+                  <h3 className="text-lg font-semibold mb-4">Shipping Settings</h3>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Free Shipping Threshold (R)</label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={storeSettings.freeShippingThreshold}
+                        onChange={(e) => setStoreSettings({ ...storeSettings, freeShippingThreshold: parseFloat(e.target.value) || 0 })}
+                        className="w-full max-w-xs px-3 py-2 border rounded-md bg-background"
+                        placeholder="500"
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Orders above this amount qualify for free shipping. Set to 0 to disable free shipping.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Save Button */}
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={handleSaveSettings}
+                    disabled={savingSettings}
+                    className="px-6 py-2 rounded-lg text-white transition-all hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                    style={{
+                      background: 'linear-gradient(90deg, var(--jits-pink) 0%, var(--jits-orange) 100%)'
+                    }}
+                  >
+                    {savingSettings && <Loader2 className="h-4 w-4 animate-spin" />}
+                    Save Settings
+                  </button>
+                </div>
+
+                {/* Last Updated Info */}
+                {storeSettings.updatedAt && (
+                  <p className="text-sm text-muted-foreground text-right">
+                    Last updated: {new Date(storeSettings.updatedAt).toLocaleString('en-ZA')}
+                  </p>
+                )}
+              </>
+            ) : (
+              <div className="text-center py-12">
+                <p className="text-muted-foreground">Failed to load settings</p>
+                <button
+                  type="button"
+                  onClick={fetchSettings}
+                  className="mt-4 px-4 py-2 border rounded-lg hover:bg-muted transition-colors"
+                >
+                  Retry
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Product Modals */}
@@ -1313,7 +2081,10 @@ export function Dashboard() {
         <OrderDetails
           order={selectedOrder}
           onClose={() => setSelectedOrder(null)}
-          onStatusUpdate={handleOrderStatusUpdate}
+          onOrderUpdate={(updatedOrder) => {
+            setSelectedOrder(updatedOrder);
+            fetchOrders();
+          }}
         />
       )}
     </div>

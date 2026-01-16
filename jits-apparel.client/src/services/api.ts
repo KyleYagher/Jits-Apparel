@@ -239,6 +239,49 @@ export class ApiClient {
   async getOrderInvoice(id: number): Promise<InvoiceData> {
     return this.get<InvoiceData>(`/orders/${id}/invoice`);
   }
+
+  // Shipping endpoints
+  async getShippingRates(request: GetShippingRatesRequest): Promise<ShippingRatesResponse> {
+    return this.post<ShippingRatesResponse>('/shipping/rates', request);
+  }
+
+  async getOrderTracking(orderId: number): Promise<TrackingResponse> {
+    return this.get<TrackingResponse>(`/shipping/tracking/order/${orderId}`);
+  }
+
+  async getTrackingByReference(trackingReference: string): Promise<TrackingResponse> {
+    return this.get<TrackingResponse>(`/shipping/tracking/${encodeURIComponent(trackingReference)}`);
+  }
+
+  // Shipment management (Admin)
+  async createShipment(request: CreateShipmentRequest): Promise<ShipmentResponse> {
+    return this.post<ShipmentResponse>('/shipping/shipments', request);
+  }
+
+  async getShipmentLabel(orderId: number): Promise<{ url: string }> {
+    return this.get<{ url: string }>(`/shipping/label/${orderId}`);
+  }
+
+  async cancelShipment(orderId: number): Promise<{ success: boolean }> {
+    return this.post<{ success: boolean }>(`/shipping/cancel/${orderId}`);
+  }
+
+  async getShippingRatesForOrder(orderId: number): Promise<ShippingRatesResponse> {
+    return this.get<ShippingRatesResponse>(`/shipping/rates/order/${orderId}`);
+  }
+
+  // Store Settings endpoints
+  async getPublicSettings(): Promise<PublicStoreSettings> {
+    return this.get<PublicStoreSettings>('/settings');
+  }
+
+  async getAdminSettings(): Promise<StoreSettings> {
+    return this.get<StoreSettings>('/settings/admin');
+  }
+
+  async updateSettings(settings: UpdateStoreSettingsRequest): Promise<StoreSettings> {
+    return this.put<StoreSettings>('/settings', settings);
+  }
 }
 
 export interface Product {
@@ -343,6 +386,11 @@ export interface CreateOrderRequest {
   items: CreateOrderItemRequest[];
   notes?: string;
   shippingAddress?: ShippingAddress;
+  // Shipping option selected at checkout
+  serviceLevelCode?: string;
+  serviceLevelName?: string;
+  shippingCost?: number;
+  deliveryEstimate?: string;
 }
 
 export interface CreateOrderItemRequest {
@@ -382,6 +430,12 @@ export interface Order {
   trackingNumber?: string;
   estimatedDelivery?: string;
   shippingAddress?: ShippingAddress;
+  carrierName?: string;
+  shippingCost?: number;
+  serviceLevelCode?: string;
+  serviceLevelName?: string;
+  shippedDate?: string;
+  deliveredDate?: string;
   // Payment info
   paymentMethod?: string;
   paymentStatus: string;
@@ -458,9 +512,88 @@ export interface InvoiceData {
   subtotal: number;
   shipping: number;
   tax: number;
+  taxRate: number;
   total: number;
   paymentMethod?: string;
   paymentStatus: string;
+  carrierName?: string;
+  trackingNumber?: string;
+  serviceLevelName?: string;
+  // Store information for invoice
+  storeName?: string;
+  storeEmail?: string;
+  storePhone?: string;
+  storeAddress?: string;
+  vatNumber?: string;
+}
+
+// Shipping types
+export interface GetShippingRatesRequest {
+  deliveryAddress: ShippingAddress;
+  parcels?: Parcel[];
+  declaredValue?: number;
+}
+
+export interface Parcel {
+  lengthCm: number;
+  widthCm: number;
+  heightCm: number;
+  weightKg: number;
+  description?: string;
+}
+
+export interface ShippingRatesResponse {
+  rates: ShippingRate[];
+  freeShippingAvailable: boolean;
+  amountToFreeShipping: number;
+}
+
+export interface ShippingRate {
+  serviceLevelId: number;
+  serviceLevelCode: string;
+  serviceLevelName: string;
+  rate: number;
+  vat: number;
+  totalRate: number;
+  estimatedDeliveryFrom?: string;
+  estimatedDeliveryTo?: string;
+  deliveryEstimate: string;
+  collectionHub?: string;
+  deliveryHub?: string;
+}
+
+export interface TrackingResponse {
+  trackingReference: string;
+  status: string;
+  statusDescription: string;
+  collectionHub?: string;
+  deliveryHub?: string;
+  collectedDate?: string;
+  deliveredDate?: string;
+  estimatedDeliveryFrom?: string;
+  estimatedDeliveryTo?: string;
+  events: TrackingEvent[];
+  proofOfDelivery?: ProofOfDelivery;
+}
+
+export interface TrackingEvent {
+  id: number;
+  status: string;
+  message: string;
+  location?: string;
+  eventDate: string;
+  source?: string;
+}
+
+export interface ProofOfDelivery {
+  method: string;
+  recipientName?: string;
+  imageUrls: string[];
+  pdfUrls: string[];
+  digitalPodUrl?: string;
+  deliveredAt?: string;
+  latitude?: number;
+  longitude?: number;
 }
 
 export interface PaginatedOrderResponse {
@@ -469,6 +602,74 @@ export interface PaginatedOrderResponse {
   page: number;
   pageSize: number;
   totalPages: number;
+}
+
+// Shipment types
+export interface CreateShipmentRequest {
+  orderId: number;
+  serviceLevelCode: string;
+  parcels: Parcel[];
+  declaredValue?: number;
+  collectionInstructions?: string;
+  deliveryInstructions?: string;
+  muteNotifications?: boolean;
+}
+
+export interface ShipmentResponse {
+  shipmentId: number;
+  trackingReference: string;
+  customTrackingReference: string;
+  status: string;
+  rate: number;
+  serviceLevelCode: string;
+  serviceLevelName: string;
+  estimatedCollection?: string;
+  estimatedDeliveryFrom?: string;
+  estimatedDeliveryTo?: string;
+  labelUrl?: string;
+  parcelTrackingReferences: string[];
+  createdAt: string;
+}
+
+// Store Settings types
+export interface StoreSettings {
+  vatRate: number;
+  vatEnabled: boolean;
+  vatNumber: string;
+  storeName: string;
+  storeEmail: string;
+  storePhone: string;
+  storeAddressLine1: string;
+  storeAddressLine2: string;
+  storeCity: string;
+  storeProvince: string;
+  storePostalCode: string;
+  storeCountry: string;
+  freeShippingThreshold: number;
+  updatedAt?: string;
+}
+
+export interface PublicStoreSettings {
+  vatRate: number;
+  vatEnabled: boolean;
+  freeShippingThreshold: number;
+  storeName: string;
+}
+
+export interface UpdateStoreSettingsRequest {
+  vatRate?: number;
+  vatEnabled?: boolean;
+  vatNumber?: string;
+  storeName?: string;
+  storeEmail?: string;
+  storePhone?: string;
+  storeAddressLine1?: string;
+  storeAddressLine2?: string;
+  storeCity?: string;
+  storeProvince?: string;
+  storePostalCode?: string;
+  storeCountry?: string;
+  freeShippingThreshold?: number;
 }
 
 export const apiClient = new ApiClient();

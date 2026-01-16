@@ -17,6 +17,7 @@ public class JitsDbContext : IdentityDbContext<User, IdentityRole<int>, int>
     public DbSet<OrderItem> OrderItems => Set<OrderItem>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<CarouselItem> CarouselItems => Set<CarouselItem>();
+    public DbSet<StoreSettings> StoreSettings => Set<StoreSettings>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
