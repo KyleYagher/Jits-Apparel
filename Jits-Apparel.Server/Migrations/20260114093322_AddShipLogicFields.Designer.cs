@@ -3,6 +3,7 @@ using System;
 using Jits.API.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Jits_Apparel.Server.Migrations
 {
     [DbContext(typeof(JitsDbContext))]
-    partial class JitsDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260114093322_AddShipLogicFields")]
+    partial class AddShipLogicFields
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -363,74 +366,6 @@ namespace Jits_Apparel.Server.Migrations
                     b.HasIndex("UserId");
 
                     b.ToTable("RefreshTokens");
-                });
-
-            modelBuilder.Entity("Jits.API.Models.Entities.StoreSettings", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<decimal>("FreeShippingThreshold")
-                        .HasColumnType("numeric");
-
-                    b.Property<string>("StoreAddressLine1")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("StoreAddressLine2")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("StoreCity")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("StoreCountry")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("StoreEmail")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("StoreName")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("StorePhone")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("StorePostalCode")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("StoreProvince")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<bool>("VatEnabled")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("VatNumber")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<decimal>("VatRate")
-                        .HasColumnType("numeric");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("StoreSettings");
                 });
 
             modelBuilder.Entity("Jits.API.Models.Entities.User", b =>

@@ -361,3 +361,5 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+/tmpclaude-6853-cwd
+/tmpclaude-eacb-cwd

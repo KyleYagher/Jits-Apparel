@@ -9,6 +9,8 @@ using Jits.API.Models.Entities;
 using Jits.API.Services;
 using Jits_Apparel.Server.Models.Enums;
 
+// ShipLogicSettings is in the same namespace as other configuration models
+
 #if DEBUG
 // Enable PII logging ONLY in debug builds
 Microsoft.IdentityModel.Logging.IdentityModelEventSource.ShowPII = true;
@@ -119,8 +121,10 @@ builder.Services.AddAuthentication(options =>
 // Register application services
 builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection("JwtSettings"));
 builder.Services.Configure<EmailSettings>(builder.Configuration.GetSection("EmailSettings"));
+builder.Services.Configure<ShipLogicSettings>(builder.Configuration.GetSection("ShipLogicSettings"));
 builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
+builder.Services.AddHttpClient<IShippingService, ShipLogicService>();
 
 // Add CORS for frontend
 builder.Services.AddCors(options =>

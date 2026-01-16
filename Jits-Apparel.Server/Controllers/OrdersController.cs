@@ -262,7 +262,12 @@ public class OrdersController : ControllerBase
                 ShippingCity = request.ShippingAddress?.City,
                 ShippingProvince = request.ShippingAddress?.Province,
                 ShippingPostalCode = request.ShippingAddress?.PostalCode,
-                ShippingCountry = request.ShippingAddress?.Country ?? "South Africa"
+                ShippingCountry = request.ShippingAddress?.Country ?? "South Africa",
+                // Shipping option selected at checkout
+                ServiceLevelCode = request.ServiceLevelCode,
+                ServiceLevelName = request.ServiceLevelName,
+                ShippingCost = request.ShippingCost,
+                EstimatedDelivery = request.DeliveryEstimate
             };
 
             // Create OrderItems and calculate totals
@@ -287,7 +292,8 @@ public class OrdersController : ControllerBase
                 product.UpdatedAt = DateTime.UtcNow;
             }
 
-            order.TotalAmount = totalAmount;
+            // Add shipping cost to total
+            order.TotalAmount = totalAmount + (request.ShippingCost ?? 0m);
 
             _context.Orders.Add(order);
             await _context.SaveChangesAsync();
@@ -522,8 +528,28 @@ public class OrdersController : ControllerBase
             if (!this.IsOwnerOrAdmin(order.UserId))
                 return Forbid();
 
-            // TODO: Generate actual PDF invoice
-            // For now, return invoice data as JSON that could be used client-side
+            // Get store settings for VAT and store information
+            var settings = await _context.StoreSettings.FirstOrDefaultAsync();
+
+            // Calculate VAT
+            var shippingCost = order.ShippingCost ?? 0m;
+            var totalWithShipping = order.TotalAmount;
+            var itemsTotal = totalWithShipping - shippingCost;
+            var vatRate = settings?.VatEnabled == true ? settings.VatRate : 0m;
+            var subtotalExclVat = vatRate > 0 ? itemsTotal / (1 + vatRate / 100) : itemsTotal;
+            var vatAmount = itemsTotal - subtotalExclVat;
+
+            // Build store address string
+            var storeAddressParts = new List<string>();
+            if (!string.IsNullOrEmpty(settings?.StoreAddressLine1))
+                storeAddressParts.Add(settings.StoreAddressLine1);
+            if (!string.IsNullOrEmpty(settings?.StoreAddressLine2))
+                storeAddressParts.Add(settings.StoreAddressLine2);
+            if (!string.IsNullOrEmpty(settings?.StoreCity) || !string.IsNullOrEmpty(settings?.StoreProvince) || !string.IsNullOrEmpty(settings?.StorePostalCode))
+                storeAddressParts.Add($"{settings?.StoreCity}, {settings?.StoreProvince} {settings?.StorePostalCode}".Trim());
+            if (!string.IsNullOrEmpty(settings?.StoreCountry))
+                storeAddressParts.Add(settings.StoreCountry);
+
             var invoiceData = new
             {
                 invoiceNumber = $"INV-{order.OrderNumber}",
@@ -551,12 +577,22 @@ public class OrdersController : ControllerBase
                     size = oi.Size,
                     color = oi.Color
                 }),
-                subtotal = order.TotalAmount,
-                shipping = 0m, // TODO: Add shipping cost to order model if needed
-                tax = 0m, // TODO: Add tax calculation if needed
-                total = order.TotalAmount,
+                subtotal = subtotalExclVat,
+                shipping = shippingCost,
+                tax = vatAmount,
+                taxRate = vatRate,
+                total = totalWithShipping,
                 paymentMethod = order.PaymentMethod,
-                paymentStatus = order.PaymentStatus
+                paymentStatus = order.PaymentStatus,
+                carrierName = order.CarrierName,
+                trackingNumber = order.TrackingNumber,
+                serviceLevelName = order.ServiceLevelName,
+                // Store information
+                storeName = settings?.StoreName ?? "Jits Apparel",
+                storeEmail = settings?.StoreEmail,
+                storePhone = settings?.StorePhone,
+                storeAddress = storeAddressParts.Count > 0 ? string.Join(", ", storeAddressParts) : null,
+                vatNumber = settings?.VatNumber
             };
 
             _logger.LogInformation("Invoice generated for order {OrderId}", id);
@@ -596,6 +632,12 @@ public class OrdersController : ControllerBase
             TrackingNumber = order.TrackingNumber,
             ShippingMethod = order.ShippingMethod?.ToString(),
             EstimatedDelivery = order.EstimatedDelivery,
+            CarrierName = order.CarrierName,
+            ShippingCost = order.ShippingCost,
+            ServiceLevelCode = order.ServiceLevelCode,
+            ServiceLevelName = order.ServiceLevelName,
+            ShippedDate = order.ShippedDate,
+            DeliveredDate = order.DeliveredDate,
             PaymentMethod = order.PaymentMethod,
             PaymentStatus = order.PaymentStatus,
             ShippingAddress = !string.IsNullOrEmpty(order.ShippingAddressLine1) ? new ShippingAddressDto

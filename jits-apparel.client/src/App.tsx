@@ -4,7 +4,6 @@ import { CartProvider } from "../context/CartProvider";
 import { useAuth } from "../context/useAuth";
 import { router } from "./router/routes";
 import { SplashScreen } from "./components/SplashScreen";
-import './App.css';
 
 function App() {
   const { isLoading } = useAuth();

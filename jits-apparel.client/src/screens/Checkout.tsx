@@ -1,9 +1,9 @@
-import { useState } from 'react';
-import { ArrowLeft, CheckCircle, Loader2 } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { ArrowLeft, CheckCircle, Loader2, Truck, Package } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useCart } from '../../context/useCart';
 import { useAuth } from '../../context/useAuth';
-import { apiClient, type Order, type CreateOrderRequest } from '../services/api';
+import { apiClient, type Order, type CreateOrderRequest, type ShippingRate, type ShippingRatesResponse } from '../services/api';
 import { toast } from 'sonner';
 
 export default function CheckoutScreen() {
@@ -23,6 +23,67 @@ export default function CheckoutScreen() {
     postalCode: ''
   });
 
+  // Shipping state
+  const [shippingRates, setShippingRates] = useState<ShippingRatesResponse | null>(null);
+  const [selectedRate, setSelectedRate] = useState<ShippingRate | null>(null);
+  const [isLoadingRates, setIsLoadingRates] = useState(false);
+  const [ratesError, setRatesError] = useState<string | null>(null);
+
+  // Check if address is complete enough to fetch rates
+  const isAddressComplete = formData.address && formData.city && formData.province && formData.postalCode;
+
+  // Fetch shipping rates when address is complete
+  const fetchShippingRates = useCallback(async () => {
+    if (!isAddressComplete) return;
+
+    setIsLoadingRates(true);
+    setRatesError(null);
+
+    try {
+      const response = await apiClient.getShippingRates({
+        deliveryAddress: {
+          fullName: formData.fullName || 'Customer',
+          addressLine1: formData.address,
+          city: formData.city,
+          province: formData.province,
+          postalCode: formData.postalCode,
+          country: 'South Africa',
+          phone: formData.phone,
+          email: formData.email
+        },
+        declaredValue: cartTotal
+      });
+
+      setShippingRates(response);
+
+      // Auto-select first rate if none selected
+      if (response.rates.length > 0 && !selectedRate) {
+        setSelectedRate(response.rates[0]);
+      }
+    } catch (error) {
+      console.error('Failed to fetch shipping rates:', error);
+      setRatesError('Unable to calculate shipping rates. Please verify your address.');
+      setShippingRates(null);
+    } finally {
+      setIsLoadingRates(false);
+    }
+  }, [isAddressComplete, formData, cartTotal, selectedRate]);
+
+  // Debounce address changes before fetching rates
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (isAddressComplete) {
+        fetchShippingRates();
+      }
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [formData.address, formData.city, formData.province, formData.postalCode, fetchShippingRates, isAddressComplete]);
+
+  // Calculate total with shipping
+  const shippingCost = shippingRates?.freeShippingAvailable ? 0 : (selectedRate?.totalRate ?? 0);
+  const orderTotal = cartTotal + shippingCost;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -36,6 +97,12 @@ export default function CheckoutScreen() {
     // Check cart is not empty
     if (cart.length === 0) {
       toast.error('Your cart is empty');
+      return;
+    }
+
+    // Check shipping rate is selected (unless free shipping)
+    if (!shippingRates?.freeShippingAvailable && !selectedRate) {
+      toast.error('Please select a shipping method');
       return;
     }
 
@@ -59,7 +126,12 @@ export default function CheckoutScreen() {
           country: 'South Africa',
           phone: formData.phone,
           email: formData.email
-        }
+        },
+        // Include shipping option selected at checkout
+        serviceLevelCode: shippingRates?.freeShippingAvailable ? 'FREE' : selectedRate?.serviceLevelCode,
+        serviceLevelName: shippingRates?.freeShippingAvailable ? 'Free Standard Shipping' : selectedRate?.serviceLevelName,
+        shippingCost: shippingCost,
+        deliveryEstimate: shippingRates?.freeShippingAvailable ? '3-5 business days' : selectedRate?.deliveryEstimate
       };
 
       const order = await apiClient.createOrder(orderRequest);
@@ -76,10 +148,16 @@ export default function CheckoutScreen() {
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
-      [e.target.name]: e.target.value
+      [name]: value
     }));
+
+    // Reset shipping rates when address changes
+    if (['address', 'city', 'province', 'postalCode'].includes(name)) {
+      setSelectedRate(null);
+    }
   };
 
   if (orderComplete && createdOrder) {
@@ -290,10 +368,105 @@ export default function CheckoutScreen() {
                     </select>
                   </div>
 
+                  {/* Shipping Options Section */}
+                  <div className="pt-4 border-t">
+                    <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                      <Truck className="w-5 h-5" />
+                      Shipping Method
+                    </h3>
+
+                    {!isAddressComplete ? (
+                      <p className="text-sm text-muted-foreground">
+                        Enter your delivery address to see shipping options.
+                      </p>
+                    ) : isLoadingRates ? (
+                      <div className="flex items-center gap-2 text-muted-foreground">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Calculating shipping rates...
+                      </div>
+                    ) : ratesError ? (
+                      <div className="text-sm text-red-500">
+                        {ratesError}
+                        <button
+                          type="button"
+                          onClick={fetchShippingRates}
+                          className="ml-2 text-primary underline"
+                        >
+                          Retry
+                        </button>
+                      </div>
+                    ) : shippingRates ? (
+                      <div className="space-y-3">
+                        {/* Free Shipping Banner */}
+                        {shippingRates.freeShippingAvailable ? (
+                          <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/20 text-green-600 dark:text-green-400">
+                            <div className="flex items-center gap-2">
+                              <Package className="w-5 h-5" />
+                              <span className="font-medium">Free Shipping Applied!</span>
+                            </div>
+                            <p className="text-sm mt-1 opacity-80">
+                              Your order qualifies for free standard shipping.
+                            </p>
+                          </div>
+                        ) : shippingRates.amountToFreeShipping > 0 && (
+                          <div className="p-3 rounded-lg bg-muted text-sm">
+                            Add <span className="font-semibold">R{shippingRates.amountToFreeShipping.toFixed(2)}</span> more for free shipping!
+                          </div>
+                        )}
+
+                        {/* Shipping Options */}
+                        {!shippingRates.freeShippingAvailable && shippingRates.rates.map((rate) => (
+                          <label
+                            key={rate.serviceLevelCode}
+                            className={`flex items-start gap-3 p-4 rounded-lg border cursor-pointer transition-all ${
+                              selectedRate?.serviceLevelCode === rate.serviceLevelCode
+                                ? 'border-primary bg-primary/5'
+                                : 'border-border hover:border-primary/50'
+                            }`}
+                          >
+                            <input
+                              type="radio"
+                              name="shippingRate"
+                              value={rate.serviceLevelCode}
+                              checked={selectedRate?.serviceLevelCode === rate.serviceLevelCode}
+                              onChange={() => setSelectedRate(rate)}
+                              className="mt-1"
+                            />
+                            <div className="flex-1">
+                              <div className="flex justify-between items-start">
+                                <div>
+                                  <span className="font-medium">{rate.serviceLevelName}</span>
+                                  <p className="text-sm text-muted-foreground">
+                                    {rate.deliveryEstimate}
+                                  </p>
+                                </div>
+                                <span className="font-semibold" style={{ color: 'var(--jits-pink)' }}>
+                                  R{rate.totalRate.toFixed(2)}
+                                </span>
+                              </div>
+                            </div>
+                          </label>
+                        ))}
+
+                        {shippingRates.freeShippingAvailable && (
+                          <div className="p-4 rounded-lg border border-green-500/30 bg-green-500/5">
+                            <div className="flex justify-between items-center">
+                              <div>
+                                <span className="font-medium">Standard Shipping</span>
+                                <p className="text-sm text-muted-foreground">3-5 business days</p>
+                              </div>
+                              <span className="font-semibold text-green-600 dark:text-green-400">FREE</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ) : null}
+                  </div>
+
                   <button
                     type="submit"
-                    disabled={isSubmitting}
-                    className="w-full py-4 rounded-lg text-white transition-all hover:opacity-90 mt-6 flex items-center justify-center gap-2 disabled:opacity-50"
+                    disabled={isSubmitting || (!shippingRates?.freeShippingAvailable && !selectedRate)}
+                    className="w-full py-4 rounded-lg text-white transition-all hover:opacity-90 mt-6 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                     style={{
                       background: 'linear-gradient(90deg, var(--jits-pink) 0%, var(--jits-orange) 100%)'
                     }}
@@ -345,15 +518,34 @@ export default function CheckoutScreen() {
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Shipping</span>
-                    <span>Free</span>
+                    {shippingRates?.freeShippingAvailable ? (
+                      <span className="text-green-600 dark:text-green-400 font-medium">FREE</span>
+                    ) : selectedRate ? (
+                      <span>R{selectedRate.totalRate.toFixed(2)}</span>
+                    ) : (
+                      <span className="text-muted-foreground">-</span>
+                    )}
                   </div>
                   <div className="flex justify-between pt-2 border-t">
                     <span className="text-lg">Total</span>
                     <span className="text-2xl" style={{ color: 'var(--jits-pink)' }}>
-                      R{cartTotal.toFixed(2)}
+                      R{orderTotal.toFixed(2)}
                     </span>
                   </div>
                 </div>
+
+                {/* Shipping Info */}
+                {selectedRate && !shippingRates?.freeShippingAvailable && (
+                  <div className="mt-4 p-3 rounded-lg bg-muted text-sm">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Truck className="w-4 h-4" />
+                      <span className="font-medium">{selectedRate.serviceLevelName}</span>
+                    </div>
+                    <p className="text-muted-foreground">
+                      Estimated delivery: {selectedRate.deliveryEstimate}
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
           </div>

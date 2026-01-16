@@ -8,6 +8,12 @@ public class CreateOrderRequest
     public List<CreateOrderItemRequest> Items { get; set; } = new();
     public string? Notes { get; set; }
     public ShippingAddressDto? ShippingAddress { get; set; }
+
+    // Shipping option selected at checkout
+    public string? ServiceLevelCode { get; set; }
+    public string? ServiceLevelName { get; set; }
+    public decimal? ShippingCost { get; set; }
+    public string? DeliveryEstimate { get; set; }
 }
 
 public class CreateOrderItemRequest
@@ -54,6 +60,12 @@ public class OrderDto
     public string? ShippingMethod  { get; set; }
     public string? EstimatedDelivery { get; set; }
     public ShippingAddressDto? ShippingAddress { get; set; }
+    public string? CarrierName { get; set; }
+    public decimal? ShippingCost { get; set; }
+    public string? ServiceLevelCode { get; set; }
+    public string? ServiceLevelName { get; set; }
+    public DateTime? ShippedDate { get; set; }
+    public DateTime? DeliveredDate { get; set; }
 
     // Payment info
     public string? PaymentMethod { get; set; }
