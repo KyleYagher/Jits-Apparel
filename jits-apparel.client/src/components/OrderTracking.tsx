@@ -65,8 +65,7 @@ export default function OrderTracking({ orderId, trackingNumber, onClose }: Orde
         const data = await apiClient.getOrderTracking(orderId);
         setTracking(data);
         setError(null);
-      } catch (err) {
-        console.error('Failed to fetch tracking:', err);
+      } catch {
         setError('Unable to load tracking information');
       } finally {
         setIsLoading(false);

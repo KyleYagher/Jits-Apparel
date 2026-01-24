@@ -36,9 +36,7 @@ export function LoginPage() {
     setIsLoading(true);
 
     try {
-      console.log('Attempting login with:', email);
       const result = await login(email, password);
-      console.log('Login result:', result);
 
       if (result.success) {
         // Redirect to profile page after successful login
@@ -46,8 +44,7 @@ export function LoginPage() {
       } else {
         setError(result.error || 'Login failed');
       }
-    } catch (err) {
-      console.error('Login error:', err);
+    } catch {
       setError('An unexpected error occurred');
     } finally {
       setIsLoading(false);

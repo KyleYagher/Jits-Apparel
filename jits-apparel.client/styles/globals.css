@@ -282,3 +282,65 @@ html {
 .dark .slick-next:before {
   color: var(--jits-yellow);
 }
+
+/* Theme-aware scrollbar styles */
+/* Light theme scrollbars (default) */
+:root,
+:root.light {
+  --scrollbar-track: #e5e5e5;
+  --scrollbar-thumb: #a3a3a3;
+  --scrollbar-thumb-hover: #737373;
+}
+
+/* Dark theme scrollbars */
+:root.dark {
+  --scrollbar-track: #262626;
+  --scrollbar-thumb: #525252;
+  --scrollbar-thumb-hover: #6b6b6b;
+}
+
+/* Firefox scrollbar styling */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+/* Webkit browsers (Chrome, Safari, Edge) */
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 5px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}
+
+*::-webkit-scrollbar-corner {
+  background: var(--scrollbar-track);
+}
+
+/* Explicit dark mode scrollbar overrides for portals and modals */
+:root.dark *::-webkit-scrollbar-track {
+  background: #262626;
+}
+
+:root.dark *::-webkit-scrollbar-thumb {
+  background: #525252;
+}
+
+:root.dark *::-webkit-scrollbar-thumb:hover {
+  background: #6b6b6b;
+}
+
+:root.dark * {
+  scrollbar-color: #525252 #262626;
+}

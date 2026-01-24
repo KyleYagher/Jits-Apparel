@@ -338,13 +338,9 @@ export function Dashboard() {
   const fetchProducts = async () => {
     try {
       setLoadingProducts(true);
-      console.log('Fetching products from database...');
       const fetchedProducts = await apiClient.getProducts();
-      console.log('Products fetched:', fetchedProducts);
       setProducts(fetchedProducts);
-      toast.success(`Loaded ${fetchedProducts.length} products from database`);
     } catch (error) {
-      console.error('Error fetching products:', error);
       toast.error(`Failed to load products: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setLoadingProducts(false);
@@ -427,7 +423,6 @@ export function Dashboard() {
       const items = await apiClient.getAllCarouselItems();
       setCarouselItems(items);
     } catch (error) {
-      console.error('Error fetching carousel items:', error);
       toast.error(`Failed to load carousel items: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setLoadingCarousel(false);
@@ -525,7 +520,7 @@ export function Dashboard() {
   }, [activeTab]);
 
   // Order handlers
-  const fetchOrders = async () => {
+  const fetchOrders = useCallback(async () => {
     try {
       setLoadingOrders(true);
       const response = await apiClient.getAllOrders({
@@ -540,12 +535,11 @@ export function Dashboard() {
         page: response.page,
       });
     } catch (error) {
-      console.error('Error fetching orders:', error);
       toast.error(`Failed to load orders: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setLoadingOrders(false);
     }
-  };
+  }, [ordersPagination.page, orderFilters.status, orderFilters.search]);
 
   const viewOrderDetails = async (orderId: number) => {
     try {
@@ -561,7 +555,7 @@ export function Dashboard() {
     if (activeTab === 'orders' || activeTab === 'overview') {
       fetchOrders();
     }
-  }, [activeTab, orderFilters.status, orderFilters.search, ordersPagination.page]);
+  }, [activeTab, fetchOrders]);
 
   // Delivery handlers
   const fetchDeliveryData = async () => {
@@ -606,7 +600,6 @@ export function Dashboard() {
       setIntegrationStatus('active');
       setLastSyncTime(new Date());
     } catch (error) {
-      console.error('Error fetching delivery data:', error);
       setIntegrationStatus('error');
       toast.error(`Failed to load delivery data: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
@@ -627,7 +620,6 @@ export function Dashboard() {
           : ps
       ));
     } catch (error) {
-      console.error('Error fetching rates:', error);
       toast.error(`Failed to get shipping rates: ${error instanceof Error ? error.message : 'Unknown error'}`);
       setPendingShipments(prev => prev.map(ps =>
         ps.order.id === orderId ? { ...ps, isLoadingRates: false } : ps
@@ -666,7 +658,6 @@ export function Dashboard() {
       // Refresh delivery data
       await fetchDeliveryData();
     } catch (error) {
-      console.error('Error creating shipment:', error);
       toast.error(`Failed to create shipment: ${error instanceof Error ? error.message : 'Unknown error'}`, { id: `shipment-${orderId}` });
     } finally {
       setCreatingShipment(null);
@@ -684,7 +675,6 @@ export function Dashboard() {
         as.order.id === orderId ? { ...as, tracking, isLoadingTracking: false } : as
       ));
     } catch (error) {
-      console.error('Error fetching tracking:', error);
       toast.error(`Failed to get tracking: ${error instanceof Error ? error.message : 'Unknown error'}`);
       setActiveShipments(prev => prev.map(as =>
         as.order.id === orderId ? { ...as, isLoadingTracking: false } : as
@@ -752,7 +742,6 @@ export function Dashboard() {
       });
       setAnalyticsData(data);
     } catch (error) {
-      console.error('Error fetching analytics:', error);
       toast.error(`Failed to load analytics: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setLoadingAnalytics(false);

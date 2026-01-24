@@ -34,8 +34,8 @@ export function OrderDetails({ order: initialOrder, onClose, onOrderUpdate }: Or
       try {
         const settings = await apiClient.getAdminSettings();
         setStoreSettings(settings);
-      } catch (error) {
-        console.error('Failed to load store settings:', error);
+      } catch {
+        // Settings are optional for display
       }
     };
     fetchSettings();
@@ -174,7 +174,6 @@ export function OrderDetails({ order: initialOrder, onClose, onOrderUpdate }: Or
 
       toast.success('Invoice downloaded!');
     } catch (error) {
-      console.error('PDF generation error:', error);
       toast.error(error instanceof Error ? error.message : 'Failed to download invoice');
     } finally {
       setIsDownloadingInvoice(false);

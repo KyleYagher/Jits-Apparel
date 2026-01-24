@@ -33,8 +33,6 @@ export class ApiClient {
     const url = `${API_BASE_URL}${endpoint}`;
     const token = this.getAuthToken();
 
-    console.log('API Request:', { url, method: options?.method, hasToken: !!token });
-
     const response = await fetch(url, {
       ...options,
       headers: {
@@ -44,12 +42,9 @@ export class ApiClient {
       },
     });
 
-    console.log('API Response:', { status: response.status, statusText: response.statusText });
-
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ message: response.statusText }));
       const errorMessage = errorData.message || `API Error: ${response.status} ${response.statusText}`;
-      console.error('API Error:', errorMessage, errorData);
       throw new Error(errorMessage);
     }
 

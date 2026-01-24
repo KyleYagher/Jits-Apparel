@@ -41,7 +41,9 @@ builder.Services.AddIdentity<User, IdentityRole<int>>(options =>
 
     // User settings
     options.User.RequireUniqueEmail = true;
-    options.SignIn.RequireConfirmedEmail = false; // Disabled for development
+
+    // Email verification - enabled in production, disabled in development
+    options.SignIn.RequireConfirmedEmail = !builder.Environment.IsDevelopment();
 })
 .AddEntityFrameworkStores<JitsDbContext>()
 .AddDefaultTokenProviders();
@@ -51,6 +53,25 @@ var jwtSettings = builder.Configuration.GetSection("JwtSettings").Get<JwtSetting
 if (jwtSettings == null)
 {
     throw new InvalidOperationException("JWT settings are not configured in appsettings.json");
+}
+
+// Validate critical configuration in production
+if (!builder.Environment.IsDevelopment())
+{
+    var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+    if (string.IsNullOrEmpty(connectionString))
+    {
+        throw new InvalidOperationException(
+            "Database connection string is required in production. " +
+            "Set ConnectionStrings__DefaultConnection environment variable.");
+    }
+
+    if (string.IsNullOrEmpty(jwtSettings.SecretKey) || jwtSettings.SecretKey.Length < 32)
+    {
+        throw new InvalidOperationException(
+            "JWT SecretKey must be at least 32 characters in production. " +
+            "Set JwtSettings__SecretKey environment variable.");
+    }
 }
 
 builder.Services.AddAuthentication(options =>
@@ -76,7 +97,8 @@ builder.Services.AddAuthentication(options =>
         ClockSkew = TimeSpan.Zero
     };
 
-    // Add event handlers for debugging
+#if DEBUG
+    // Debug event handlers - ONLY enabled in debug builds
     options.Events = new JwtBearerEvents
     {
         OnMessageReceived = context =>
@@ -86,8 +108,8 @@ builder.Services.AddAuthentication(options =>
 
             if (!string.IsNullOrEmpty(authHeader))
             {
-                logger.LogInformation("Raw Authorization Header: '{Header}'", authHeader);
-                logger.LogInformation("Header Length: {Length}", authHeader.Length);
+                // Log token presence only, never the actual token value
+                logger.LogDebug("Authorization header present, length: {Length}", authHeader.Length);
 
                 // Check for common issues
                 if (authHeader.Contains("\r") || authHeader.Contains("\n"))
@@ -96,7 +118,7 @@ builder.Services.AddAuthentication(options =>
                 }
                 if (authHeader.Count(c => c == '.') != 2)
                 {
-                    logger.LogError("Token doesn't have 3 parts (header.payload.signature). Dot count: {Count}", authHeader.Count(c => c == '.'));
+                    logger.LogError("Token format issue: expected 3 parts");
                 }
             }
             return Task.CompletedTask;
@@ -104,18 +126,17 @@ builder.Services.AddAuthentication(options =>
         OnAuthenticationFailed = context =>
         {
             var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
-            logger.LogError("Authentication failed: {Error}", context.Exception.Message);
-            logger.LogError("Exception Type: {Type}", context.Exception.GetType().Name);
-            logger.LogError("Stack Trace: {Stack}", context.Exception.StackTrace);
+            logger.LogWarning("Authentication failed: {Error}", context.Exception.Message);
             return Task.CompletedTask;
         },
         OnTokenValidated = context =>
         {
             var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
-            logger.LogInformation("Token validated successfully for user: {User}", context.Principal?.Identity?.Name);
+            logger.LogDebug("Token validated for user: {User}", context.Principal?.Identity?.Name);
             return Task.CompletedTask;
         }
     };
+#endif
 });
 
 // Register application services
@@ -169,7 +190,12 @@ app.MapFallbackToFile("/index.html");
 // Seed database with default roles and categories
 await SeedDefaultRoles(app.Services);
 await SeedDefaultCategories(app.Services);
-await SeedTestData(app.Services);
+
+// Only seed test data in development environment
+if (app.Environment.IsDevelopment())
+{
+    await SeedTestData(app.Services);
+}
 
 app.Run();
 

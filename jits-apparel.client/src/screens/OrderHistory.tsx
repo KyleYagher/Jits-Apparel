@@ -30,8 +30,8 @@ export function OrderHistory() {
       try {
         const settings = await apiClient.getPublicSettings();
         setStoreSettings(settings);
-      } catch (error) {
-        console.error('Failed to load store settings:', error);
+      } catch {
+        // Settings are optional, silently fail
       }
     };
     fetchSettings();
@@ -50,7 +50,7 @@ export function OrderHistory() {
       setLoading(true);
       const data = await apiClient.getMyOrders();
       setOrders(data);
-    } catch (error) {
+    } catch {
       toast.error('Failed to load orders');
     } finally {
       setLoading(false);
@@ -62,7 +62,7 @@ export function OrderHistory() {
       setLoadingDetails(true);
       const order = await apiClient.getMyOrder(orderId);
       setSelectedOrder(order);
-    } catch (error) {
+    } catch {
       toast.error('Failed to load order details');
     } finally {
       setLoadingDetails(false);

@@ -20,8 +20,8 @@ export default function ShopScreen() {
         // Map API products to local Product type for ProductCard
         const mapped = allProducts.map(mapApiProductToProduct);
         setProducts(mapped);
-      } catch (error) {
-        console.error('Error fetching products:', error);
+      } catch {
+        // Silently fail - products will remain empty
       } finally {
         setLoading(false);
       }

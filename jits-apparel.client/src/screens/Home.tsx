@@ -6,6 +6,7 @@ import { ProductDetail } from '../components/ProductDetail';
 import { SplashScreen } from '../components/SplashScreen';
 import { apiClient, Product as ApiProduct, CarouselItem } from '../services/api';
 import { Product } from '../../types/types';
+import { JitsLogoText } from '../components/JitsLogoText';
 
 export default function HomeScreen() {
   const navigate = useNavigate();
@@ -23,8 +24,7 @@ export default function HomeScreen() {
         setLoadingCarousel(true);
         const items = await apiClient.getCarouselItems();
         setCarouselItems(items);
-      } catch (error) {
-        console.error('Error fetching carousel items:', error);
+      } catch {
         // If error, carousel will use hardcoded defaults
       } finally {
         setLoadingCarousel(false);
@@ -46,8 +46,8 @@ export default function HomeScreen() {
         // Map to the Product type for ProductCard
         const featured = featuredFromApi.map(apiProduct => mapApiProductToProduct(apiProduct));
         setFeaturedProducts(featured);
-      } catch (error) {
-        console.error('Error fetching featured products:', error);
+      } catch {
+        // Silently fail - products will remain empty
       } finally {
         setLoadingFeatured(false);
       }
@@ -92,7 +92,7 @@ export default function HomeScreen() {
         <section className="py-16 px-4">
           <div className="max-w-6xl mx-auto">
             <div className="text-center mb-12">
-              <h2 className="mb-4">Featured Collection</h2>
+              <JitsLogoText text='Featured Drops' scale={0.8} />
               <p className="text-muted-foreground">
                 Our most popular designs that everyone's talking about
               </p>
