@@ -18,8 +18,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (savedUser) {
         try {
           return JSON.parse(savedUser);
-        } catch (error) {
-          console.error('Failed to parse saved user', error);
+        } catch {
           localStorage.removeItem('jits-user');
         }
       }
@@ -50,7 +49,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         return { success: true };
       } catch (error) {
-        console.error('Login error:', error);
         return {
           success: false,
           error: error instanceof Error ? error.message : 'Invalid email or password'
@@ -91,7 +89,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         return { success: true };
       } catch (error) {
-        console.error('Registration error:', error);
         return {
           success: false,
           error: error instanceof Error ? error.message : 'Registration failed. Please try again.'
@@ -134,7 +131,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       };
 
       verifySession();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     return (

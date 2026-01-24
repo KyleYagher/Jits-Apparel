@@ -51,9 +51,7 @@ export function RegisterPage() {
     setIsLoading(true);
 
     try {
-      console.log('Attempting registration with:', { name, email });
       const result = await register(name, email, password);
-      console.log('Registration result:', result);
 
       if (result.success) {
         // Redirect to profile page after successful registration
@@ -61,8 +59,7 @@ export function RegisterPage() {
       } else {
         setError(result.error || 'Registration failed');
       }
-    } catch (err) {
-      console.error('Registration error:', err);
+    } catch {
       setError('An unexpected error occurred during registration');
     } finally {
       setIsLoading(false);

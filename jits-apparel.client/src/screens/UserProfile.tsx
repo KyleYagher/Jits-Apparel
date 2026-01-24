@@ -37,8 +37,7 @@ export function UserProfile() {
       setIsLoadingOrders(true);
       const orders = await apiClient.getMyOrders();
       setOrderHistory(orders);
-    } catch (error) {
-      console.error('Failed to fetch orders:', error);
+    } catch {
       toast.error('Failed to load orders');
     } finally {
       setIsLoadingOrders(false);
@@ -50,8 +49,7 @@ export function UserProfile() {
       setIsLoadingOrderDetails(true);
       const order = await apiClient.getMyOrder(orderId);
       setSelectedOrder(order);
-    } catch (error) {
-      console.error('Failed to fetch order details:', error);
+    } catch {
       toast.error('Failed to load order details');
     } finally {
       setIsLoadingOrderDetails(false);

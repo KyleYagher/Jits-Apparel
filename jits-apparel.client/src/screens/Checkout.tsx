@@ -60,8 +60,7 @@ export default function CheckoutScreen() {
       if (response.rates.length > 0 && !selectedRate) {
         setSelectedRate(response.rates[0]);
       }
-    } catch (error) {
-      console.error('Failed to fetch shipping rates:', error);
+    } catch {
       setRatesError('Unable to calculate shipping rates. Please verify your address.');
       setShippingRates(null);
     } finally {
